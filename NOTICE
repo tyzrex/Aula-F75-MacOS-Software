@@ -1,0 +1,14 @@
+AULA Hub (this project) is an independent, unofficial tool.
+
+The wired protocol notes and the key layout/themes were cross-checked against, and partly derived from,
+bakiakyol/aula-f75-hub (MIT License, https://github.com/bakiakyol/aula-f75-hub), which in turn credits
+whiskey00/lumen75, Dahuum/aula-studio and cloudglides/aula-f75-linux-drivers (all MIT).
+Sources/AulaKit/Layout.swift and ThemeData.swift are generated from that project's tables.
+
+The keymap write layout was confirmed against the JavaScript of the official "Aula Hub" 1.1.22 (read for interoperability).
+No vendor code or assets are included.
+
+MIT License (aula-f75-hub) — Copyright (c) its authors. Permission is hereby granted, free of charge, to any person obtaining
+a copy of the software and associated documentation files, to deal in the software without restriction, subject to the
+inclusion of the copyright notice and this permission notice in all copies or substantial portions of the software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
