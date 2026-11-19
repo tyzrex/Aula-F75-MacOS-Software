@@ -187,8 +187,8 @@ public final class RadioChannel: PacketChannel, @unchecked Sendable {
 
 public extension HIDDiscovery {
     /// Open the radio configuration interface of a keyboard on the dongle or Bluetooth.
-    static func openRadio() throws -> (RadioChannel, DeviceInfo) {
-        let radio = enumerate().filter { $0.info.vendorID == USBIDs.dongleVID }
+    static func openRadio(only: Connection? = nil) throws -> (RadioChannel, DeviceInfo) {
+        let radio = enumerate().filter { $0.info.vendorID == USBIDs.dongleVID && (only == nil || $0.info.connection == only) }
         guard !radio.isEmpty else { throw AulaError.notFound }
         // The configuration collection is vendor defined: 0xFF02 on the dongle.
         let pick = radio.first { $0.usagePage == 0xFF02 } ?? radio.first { $0.usagePage >= 0xFF00 }
@@ -199,4 +199,9 @@ public extension HIDDiscovery {
         try ch.open()
         return (ch, c.info)
     }
+}
+
+public extension HIDDiscovery {
+    /// Which kinds of connection macOS can currently see (without opening anything).
+    static func present() -> Set<Connection> { Set(enumerate().map(\.info.connection)) }
 }

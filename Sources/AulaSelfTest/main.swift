@@ -255,5 +255,35 @@ test("connection kinds") {
     expect(wired.connection.canWrite && !dongle.connection.canWrite && dongle.connection.canLive && !bt.connection.canLive)
 }
 
+test("legends: Windows and Mac") {
+    let win = Layout.byName["lwin"]!, alt = Layout.byName["lalt"]!, bs = Layout.byName["backspace"]!
+    expect(Legends.physical(win, flavor: .windows) == Legend("Win"))
+    expect(Legends.physical(win, flavor: .mac) == Legend("⌘", "cmd"))
+    expect(Legends.physical(alt, flavor: .mac).main == "⌥")
+    expect(Legends.physical(bs, flavor: .mac).main == "⌫")
+    expect(Flavor(osMode: 2) == .mac && Flavor(osMode: 0) == .windows && Flavor(osMode: 1) == .windows)
+    expect(Flavor.mac.keymapSystem == 1 && Flavor.windows.keymapSystem == 0)
+    let ctrlC = KeyEntry.key(hid: 0x06, modifiers: 0x01)
+    expect(Legends.entry(ctrlC, flavor: .windows).main == "Ctrl+C")
+    expect(Legends.entry(KeyEntry.key(hid: 0x06, modifiers: 0x08), flavor: .mac).main == "⌘C")
+    expect(Legends.entry(KeyEntry([0, 0x08, 0, 0]), flavor: .mac).main == "⌘")
+    expect(Legends.entry(.disabled, flavor: .mac).main == "—")
+    expect(Legends.entry(KeyEntry([7, 0, 0, 0x1A]), flavor: .windows) == Legend("Mac", "mode"), "Fn+E is Mac mode")
+    expect(Legends.entry(KeyEntry([8, 3, 1, 0]), flavor: .windows).main == "Bright +")
+    expect(Legends.entry(.consumer(0xE2), flavor: .mac).main == "Mute")
+}
+test("per-key apply selects custom first, then resends the table") {
+    let (kb, ch) = AulaKeyboard.demo()
+    let table = Custom.encode(Themes.solid(RGB(5, 6, 7)))
+    try kb.showCustom(table)
+    expect(ch.led[LEDConfig.effectOffset] == 0x15 && ch.led[LEDConfig.effectHighOffset] == 1, "custom effect 277 selected")
+    expect(ch.custom == table)
+    try kb.showCustom(table)   // unchanged table is still sent again
+    expect(ch.log.filter { $0 == Wire.writeCustom }.count == 2, "table re-sent even when unchanged")
+    let lastLED = ch.log.lastIndex(of: Wire.writeLED) ?? -1
+    let firstCustom = ch.log.firstIndex(of: Wire.writeCustom) ?? -1
+    expect(firstCustom > lastLED || ch.log.firstIndex(of: Wire.writeLED)! < firstCustom, "effect first")
+}
+
 print("\n\(checks) checks, \(failures) failed")
 exit(failures == 0 ? 0 : 1)

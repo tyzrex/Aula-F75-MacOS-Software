@@ -29,14 +29,25 @@ public final class AulaKeyboard: @unchecked Sendable {
     }
 
     /// The cable wins; with the switch on 2.4G or Bluetooth the radio interface is used.
-    public static func connect() throws -> AulaKeyboard {
-        do {
-            let (ch, info) = try HIDDiscovery.openWired()
-            return AulaKeyboard(channel: ch, info: info)
-        } catch AulaError.notFound {
-            let (ch, info) = try HIDDiscovery.openRadio()
-            return AulaKeyboard(radio: ch, info: info)
+    /// Pass `only` to insist on one kind of connection.
+    public static func connect(only: Connection? = nil) throws -> AulaKeyboard {
+        if only == nil || only == .wired {
+            do {
+                let (ch, info) = try HIDDiscovery.openWired()
+                return AulaKeyboard(channel: ch, info: info)
+            } catch AulaError.notFound where only == nil {
+                // fall through to the radio
+            }
         }
+        let (ch, info) = try HIDDiscovery.openRadio(only: only)
+        let kb = AulaKeyboard(radio: ch, info: info)
+        try kb.probe()
+        return kb
+    }
+
+    /// Check that a radio keyboard really answers (it may be asleep or off).
+    func probe() throws {
+        _ = try sync { try radioGet(cmd: Radio.cmdProfile, length: 1, attempts: 2) }
     }
 
     public var connection: Connection { info.connection }
@@ -275,13 +286,13 @@ public final class AulaKeyboard: @unchecked Sendable {
     /// Send a read request and reassemble the reply by packet index. Packets get lost (over Bluetooth
     /// roughly every other one), and the keyboard always resends the whole reply, so the request is
     /// repeated and parts are collected across attempts.
-    private func radioGet(cmd: UInt8, sub: UInt8 = 0, length: Int, magicAt: Int? = nil) throws -> [UInt8] {
+    private func radioGet(cmd: UInt8, sub: UInt8 = 0, length: Int, magicAt: Int? = nil, attempts: Int? = nil) throws -> [UInt8] {
         guard let radio else { throw AulaError.refused("this is not a radio connection") }
         guard Radio.readable.contains(cmd) else { throw AulaError.refused(String(format: "0x%02x is not a known read command", cmd)) }
         let bluetooth = info.connection == .bluetooth
         var parts: [Int: [UInt8]] = [:]
         var total: Int?
-        for _ in 0..<(bluetooth ? 15 : 4) {
+        for _ in 0..<(attempts ?? (bluetooth ? 15 : 4)) {
             try waitQuiet()
             radio.drain()
             if bluetooth { sleeper(Double.random(in: 0...0.05)) }   // shift the burst against the radio's slots
@@ -327,6 +338,15 @@ public final class AulaKeyboard: @unchecked Sendable {
     }
 
     // MARK: convenience
+
+    /// Show a per-key picture. The keyboard only paints the custom effect's table after it has been
+    /// re-sent, so the effect is selected first and the table written afterwards, even if unchanged.
+    public func showCustom(_ raw: [UInt8]) throws {
+        try sync {
+            try setEffect(Effects.customHW)
+            try writeCustom(raw, force: true)
+        }
+    }
 
     public func setEffect(_ hw: Int, brightness: Int? = nil, speed: Int? = nil, color: Int? = nil) throws {
         guard Effects.byHW(hw) != nil else { throw AulaError.refused("unknown effect \(hw)") }
