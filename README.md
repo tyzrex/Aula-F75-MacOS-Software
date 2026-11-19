@@ -7,7 +7,7 @@ key remapping with Windows and Mac tables, device settings, and backup/restore â
 |---|---|---|
 | **USB cable** | `258a:010c` | everything: read and write |
 | **2.4G dongle** | `3554:fa09` | read, back up, live lighting |
-| **Bluetooth** | `3554:fa07` | read, back up |
+| **Bluetooth** | `3554:fa07` | status only: effect, mode, side light, knob, sleep, battery |
 
 Settings are **only ever written over the cable.** Over the radio, packets get lost and a radio write is known to
 have left an F75 unable to type until its firmware was reflashed, so the app refuses them (see Safety).

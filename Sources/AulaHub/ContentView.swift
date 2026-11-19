@@ -201,7 +201,7 @@ struct ConnectView: View {
         if model.connecting { return "Connecting…" }
         if model.present.contains(.wired) { return "Your keyboard is plugged in." }
         if model.present.isEmpty { return "Plug the F75 in with its USB cable, or turn on 2.4G / Bluetooth.\nQuit the official AULA software first." }
-        return "Your keyboard is on the radio. Everything can be viewed; settings need the cable."
+        return "Your keyboard is on the radio. Settings need the cable."
     }
 
     private func connectRow(_ c: Connection) -> some View {
@@ -210,7 +210,7 @@ struct ConnectView: View {
             Image(systemName: c.symbol).frame(width: 22).foregroundStyle(seen ? Color.accentColor : .secondary)
             VStack(alignment: .leading, spacing: 1) {
                 Text(c.title).font(.callout.weight(.medium))
-                Text(c.canWrite ? "Full control" : (c.canLive ? "View, back up, live lighting" : "View and back up")).font(.caption).foregroundStyle(.secondary)
+                Text(c.capability).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
             if seen { Pill(text: "Detected", tint: .green) }

@@ -52,6 +52,13 @@ public final class AulaKeyboard: @unchecked Sendable {
 
     public var connection: Connection { info.connection }
 
+    /// Over Bluetooth only about one packet in three gets through, so the big tables (27-36 packets) never complete.
+    private func requireBulkRead(_ what: String) throws {
+        if info.connection == .bluetooth {
+            throw AulaError.refused("\(what) are too large to read over Bluetooth (the link drops most packets). Use the 2.4G dongle or the USB cable.")
+        }
+    }
+
     private func requireWired() throws {
         guard info.connection.canWrite else {
             throw AulaError.refused("settings are only written over the USB cable, never over \(info.connection.title). Plug the keyboard in to change them (reading, backups and live lighting still work wirelessly).")
@@ -120,7 +127,7 @@ public final class AulaKeyboard: @unchecked Sendable {
 
     public func readCustom() throws -> [UInt8] {
         try sync {
-            if radio != nil { return try radioGet(cmd: Radio.cmdCustom, length: Wire.customLength) }
+            if radio != nil { try requireBulkRead("per-key colors"); return try radioGet(cmd: Radio.cmdCustom, length: Wire.customLength) }
             return try wiredGet(cmd: Wire.readCustom, asked: Wire.customLength, length: Wire.customLength)
         }
     }
@@ -132,7 +139,7 @@ public final class AulaKeyboard: @unchecked Sendable {
 
     public func readPalette() throws -> [UInt8] {
         try sync {
-            if radio != nil { return try radioGet(cmd: Radio.cmdPalette, length: Wire.paletteLength) }
+            if radio != nil { try requireBulkRead("effect palettes"); return try radioGet(cmd: Radio.cmdPalette, length: Wire.paletteLength) }
             return Array(try readPalettePage().prefix(Wire.paletteLength))
         }
     }
@@ -142,6 +149,7 @@ public final class AulaKeyboard: @unchecked Sendable {
         guard (0...3).contains(layer), (0...1).contains(system) else { throw AulaError.refused("layer must be 0-3, system 0-1") }
         return try sync {
             if radio != nil {
+                try requireBulkRead("key tables")
                 // The radio protocol only exposes the Windows table, layers 0 and 1.
                 guard system == 0, layer <= 1 else { throw AulaError.refused("only the base and Fn layers of the Windows table can be read over \(info.connection.title); connect the cable for the Mac table") }
                 return try radioGet(cmd: Radio.cmdKeymap, sub: UInt8(layer), length: Wire.keymapLength)
@@ -270,38 +278,51 @@ public final class AulaKeyboard: @unchecked Sendable {
 
     // MARK: radio (2.4G dongle / Bluetooth)
 
+    private var debugRadio: Bool { ProcessInfo.processInfo.environment["AULA_DEBUG"] != nil }
+
+    private var lastKeyActivity = Date.distantPast
+
     /// Wait until no key has been held for `radioQuiet` seconds. While the keyboard answers configuration
     /// traffic it can drop the release of a key pressed at that moment, which would then auto-repeat.
     private func waitQuiet() throws {
         let start = Date()
-        var quietSince = Date()
         while true {
-            if keysHeld() { quietSince = Date() }
-            if Date().timeIntervalSince(quietSince) >= radioQuiet { return }
+            if keysHeld() { lastKeyActivity = Date() }
+            let idle = Date().timeIntervalSince(lastKeyActivity)
+            if idle >= radioQuiet { return }
             if Date().timeIntervalSince(start) > 5 { throw AulaError.refused("a key is held down; release it and try again") }
             sleeper(0.02)
         }
     }
 
-    /// Send a read request and reassemble the reply by packet index. Packets get lost (over Bluetooth
-    /// roughly every other one), and the keyboard always resends the whole reply, so the request is
-    /// repeated and parts are collected across attempts.
+    /// Send a read request and reassemble the reply by packet index.
+    ///
+    /// Over Bluetooth the keyboard answers in a burst of notifications, but the link carries only about one per
+    /// 15 ms connection event, so most of a multi-packet reply is lost, and the same few indexes survive every time.
+    /// Sending several requests a little apart restarts the burst out of phase, which lets other indexes through.
+    /// Parts are collected across attempts until the reply is complete.
     private func radioGet(cmd: UInt8, sub: UInt8 = 0, length: Int, magicAt: Int? = nil, attempts: Int? = nil) throws -> [UInt8] {
         guard let radio else { throw AulaError.refused("this is not a radio connection") }
         guard Radio.readable.contains(cmd) else { throw AulaError.refused(String(format: "0x%02x is not a known read command", cmd)) }
         let bluetooth = info.connection == .bluetooth
+        let requests = bluetooth ? 4 : 1
         var parts: [Int: [UInt8]] = [:]
         var total: Int?
-        for _ in 0..<(attempts ?? (bluetooth ? 15 : 4)) {
+        for _ in 0..<(attempts ?? (bluetooth ? 40 : 4)) {
             try waitQuiet()
             radio.drain()
-            if bluetooth { sleeper(Double.random(in: 0...0.05)) }   // shift the burst against the radio's slots
-            try radio.write(Radio.readRequest(cmd: cmd, sub: sub))
-            let deadline = Date().addingTimeInterval(2)
+            var sent = 0
+            let began = Date()
             var last: Date?
+            let deadline = began.addingTimeInterval(2 + Double(requests) * 0.04)
             while Date() < deadline {
-                if let last, Date().timeIntervalSince(last) > 0.25 { break }   // this burst is over
-                guard let raw = radio.receive(timeout: 0.05), let rep = Radio.parse(raw), rep.cmd == cmd | Radio.readFlag else { continue }
+                if sent < requests, Date().timeIntervalSince(began) >= Double(sent) * 0.04 {
+                    try radio.write(Radio.readRequest(cmd: cmd, sub: sub)); sent += 1
+                }
+                if sent == requests, let last, Date().timeIntervalSince(last) > (bluetooth ? 0.15 : 0.25) { break }   // burst over
+                guard let raw = radio.receive(timeout: 0.005) else { continue }
+                if debugRadio { FileHandle.standardError.write(Data("rx \(raw.map { String(format: "%02x", $0) }.joined(separator: " "))\n".utf8)) }
+                guard let rep = Radio.parse(raw), rep.cmd == cmd | Radio.readFlag else { continue }
                 if rep.error { throw AulaError.protocolError(String(format: "the keyboard rejected read 0x%02x", cmd | Radio.readFlag)) }
                 last = Date(); total = rep.total
                 if rep.index < rep.total { parts[rep.index] = rep.data }

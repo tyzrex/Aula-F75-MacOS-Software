@@ -77,7 +77,7 @@ func run() throws {
         let all = HIDDiscovery.enumerate()
         if all.isEmpty { print("No AULA keyboard found.") }
         for c in all {
-            print(String(format: "%@  %04x:%04x  %@  usagePage 0x%04x  maxFeature %d", c.info.name, c.info.vendorID, c.info.productID, c.info.connection.title, c.usagePage, c.maxFeature))
+            print(String(format: "%@  %04x:%04x  %@  usagePage 0x%04x  maxFeature %d  collections %@", c.info.name, c.info.vendorID, c.info.productID, c.info.connection.title, c.usagePage, c.maxFeature, c.usagePages.sorted().map { String($0, radix: 16) }.joined(separator: ",")))
         }
 
     case "effects":

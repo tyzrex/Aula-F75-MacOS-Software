@@ -38,6 +38,10 @@ public enum Connection: String, Sendable, CaseIterable {
     public var symbol: String {
         switch self { case .wired: "cable.connector"; case .dongle: "dot.radiowaves.left.and.right"; case .bluetooth: "wave.3.right" }
     }
+    /// What can be done over this connection, in a few words.
+    public var capability: String {
+        switch self { case .wired: "Full control"; case .dongle: "View, back up, live lighting"; case .bluetooth: "Status and battery (Bluetooth drops most packets)" }
+    }
     /// Settings (lighting, remaps, palettes) are only ever written over the cable.
     public var canWrite: Bool { self == .wired }
     /// Real-time lighting frames work on the cable and the dongle.
@@ -104,11 +108,18 @@ public enum HIDDiscovery {
         (IOHIDDeviceGetProperty(d, key as CFString) as? String) ?? ""
     }
 
+    private static func usagePages(_ d: IOHIDDevice) -> Set<Int> {
+        let pairs = IOHIDDeviceGetProperty(d, kIOHIDDeviceUsagePairsKey as CFString) as? [[String: Any]] ?? []
+        return Set(pairs.compactMap { ($0[kIOHIDDeviceUsagePageKey] as? NSNumber)?.intValue })
+    }
+
     public struct Candidate {
         public let device: IOHIDDevice
         public let info: DeviceInfo
         public let usagePage: Int
         public let maxFeature: Int
+        /// Usage pages of every collection the device declares (a Bluetooth keyboard is one device with several).
+        public let usagePages: Set<Int>
     }
 
     public static func enumerate() -> [Candidate] {
@@ -127,7 +138,8 @@ public enum HIDDiscovery {
             return Candidate(device: d,
                              info: DeviceInfo(name: name.isEmpty ? "AULA F75" : name, vendorID: vid, productID: pid, transport: transport),
                              usagePage: int(d, kIOHIDPrimaryUsagePageKey),
-                             maxFeature: int(d, kIOHIDMaxFeatureReportSizeKey))
+                             maxFeature: int(d, kIOHIDMaxFeatureReportSizeKey),
+                             usagePages: usagePages(d))
         }
     }
 

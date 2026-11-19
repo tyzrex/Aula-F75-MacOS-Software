@@ -60,5 +60,15 @@ Settings are changed over the cable only.
 While the keyboard answers configuration traffic it can drop the *release* of a key pressed at that moment, and the OS
 then repeats that key. The app therefore waits until no key has been held for 0.4 s before every radio request.
 
-Status: the framing and reassembly are verified against a simulated keyboard and a reference implementation; the macOS
-radio channel has not yet been tried on a real dongle or Bluetooth keyboard.
+## What was measured on macOS
+
+*Bluetooth (BLE, `3554:fa07`)*, tried on a real F75: macOS shows one HID device whose collections are keyboard (page 1),
+consumer (0x0C), mouse and the vendor collection (page `0xFF02`, 20-byte input and output reports, id `0x13`).
+Requests and replies work, but the link delivers about one notification per 15 ms connection event while the keyboard
+emits a packet every few milliseconds, so most of a reply is lost. For a 10-packet reply the same indexes (0, 1, 5, 9)
+arrive almost every time and the others (2, 3, 4, 6, 7, 8) show up in roughly one attempt in twenty. The index field of
+a request is ignored. Sending four requests 40 ms apart restarts the burst out of phase and lets more indexes through;
+a 128-byte LED block then takes 5–9 s. The 27–36 packet tables (keymap, palette, per-key colors) never complete, so over
+Bluetooth the app reads only the LED block and the battery. Use the dongle or the cable for the rest.
+
+The dongle has not been tried yet; it is a USB interface and is not expected to lose packets.

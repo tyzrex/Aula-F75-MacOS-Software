@@ -136,22 +136,27 @@ public final class RadioChannel: PacketChannel, @unchecked Sendable {
                 : String(format: "IOKit error 0x%08x", r))
         }
         opened = true
+        // A burst of reports can overflow the default input queue; make it deep.
+        IOHIDDeviceSetProperty(device, "ReportBufferEntries" as CFString, 512 as CFNumber)
         let ctx = Unmanaged.passUnretained(self).toOpaque()
         IOHIDDeviceRegisterInputReportCallback(device, buffer, bufferSize, { context, _, _, _, id, report, length in
             guard let context else { return }
             Unmanaged<RadioChannel>.fromOpaque(context).takeUnretainedValue().received(id: UInt8(truncatingIfNeeded: id), report: report, length: length)
         }, ctx)
         IOHIDDeviceSetDispatchQueue(device, queue)
+        let buf = buffer
+        IOHIDDeviceSetCancelHandler(device) { buf.deallocate() }   // required before activating; frees the report buffer
         IOHIDDeviceActivate(device)
     }
 
     deinit {
         if opened {
-            IOHIDDeviceRegisterInputReportCallback(device, buffer, bufferSize, nil, nil)
+            // After activation the callback can't be unregistered; cancelling stops it and frees the buffer.
             IOHIDDeviceCancel(device)
             IOHIDDeviceClose(device, IOOptionBits(kIOHIDOptionsTypeNone))
+        } else {
+            buffer.deallocate()
         }
-        buffer.deallocate()
     }
 
     private func received(id: UInt8, report: UnsafeMutablePointer<UInt8>, length: CFIndex) {
@@ -191,7 +196,9 @@ public extension HIDDiscovery {
         let radio = enumerate().filter { $0.info.vendorID == USBIDs.dongleVID && (only == nil || $0.info.connection == only) }
         guard !radio.isEmpty else { throw AulaError.notFound }
         // The configuration collection is vendor defined: 0xFF02 on the dongle.
-        let pick = radio.first { $0.usagePage == 0xFF02 } ?? radio.first { $0.usagePage >= 0xFF00 }
+        // On the dongle it is its own interface; over Bluetooth it is one collection of the keyboard device.
+        let pick = radio.first { $0.usagePage == 0xFF02 } ?? radio.first { $0.usagePages.contains(0xFF02) }
+            ?? radio.first { $0.usagePage >= 0xFF00 }
         guard let c = pick else {
             throw AulaError.refused("the keyboard's wireless configuration interface isn't visible to macOS")
         }

@@ -218,6 +218,13 @@ test("radio: Bluetooth packet loss is retried") {
     try expect(kb.readLED().raw == ch.board.led)
     expect(ch.requests.count >= 2, "had to ask again")
 }
+test("radio: Bluetooth only reads small blocks") {
+    let (kb, ch) = AulaKeyboard.demoRadio(connection: .bluetooth)
+    try expect(kb.readLED().raw == ch.board.led)
+    try expect(kb.readBattery().level == 100)
+    expect(throwsError { try kb.readKeymap() } && throwsError { try kb.readPalette() } && throwsError { try kb.readCustom() })
+    expect(throwsError { try Backup.capture(from: kb) }, "a full backup needs the dongle or cable")
+}
 test("radio: settings are never written") {
     let (kb, ch) = AulaKeyboard.demoRadio()
     expect(throwsError { try kb.setEffect(3) })
