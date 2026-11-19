@@ -13,7 +13,7 @@ public struct Backup: Codable, Sendable {
     public var keymapFnMac: String?
     public var version: Int = 1
 
-    static func hex(_ b: [UInt8]) -> String { b.map { String(format: "%02x", $0) }.joined() }
+    public static func hex(_ b: [UInt8]) -> String { b.map { String(format: "%02x", $0) }.joined() }
     static func bytes(_ s: String) throws -> [UInt8] {
         guard s.count % 2 == 0 else { throw AulaError.protocolError("corrupt backup") }
         var out: [UInt8] = []; var i = s.startIndex

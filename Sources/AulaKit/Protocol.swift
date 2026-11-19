@@ -99,7 +99,7 @@ public enum AulaError: Error, LocalizedError, Equatable {
     public var errorDescription: String? {
         switch self {
         case .notFound:
-            return "No AULA F75 found on the cable. Plug it in with USB (the 2.4G dongle and Bluetooth can't be configured)."
+            return "No AULA F75 found. Plug it in with the USB cable, or switch it to 2.4G / Bluetooth (read-only)."
         case .openFailed(let s): return "Couldn't open the keyboard: \(s)"
         case .protocolError(let s): return s
         case .refused(let s): return "Refused: \(s)"

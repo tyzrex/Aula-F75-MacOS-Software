@@ -81,3 +81,54 @@ public extension AulaKeyboard {
         return (kb, ch)
     }
 }
+
+/// A simulated keyboard on the 2.4G dongle / Bluetooth. Replies are chunked like the real thing and can lose packets.
+public final class MockRadioChannel: PacketChannel, @unchecked Sendable {
+    public let board: MockChannel
+    /// Drop every other reply packet on the first `lossyAttempts` read requests (Bluetooth behaviour).
+    public var lossyAttempts = 0
+    public private(set) var requests: [UInt8] = []       // command byte of every request received
+    public private(set) var livePackets: [[UInt8]] = []
+    public private(set) var unexpected: [[UInt8]] = []   // anything that was neither a read nor a live frame
+    private var inbox: [[UInt8]] = []
+
+    public init(board: MockChannel = MockChannel()) { self.board = board }
+
+    public func write(_ packet: [UInt8]) throws {
+        guard let req = Radio.parse(packet) else { unexpected.append(packet); return }
+        requests.append(req.cmd)
+        if req.cmd == Radio.cmdLive { livePackets.append(packet); return }
+        guard req.cmd & Radio.readFlag != 0 else { unexpected.append(packet); return }
+        let sub = Int(packet[4] >> 4)
+        let data: [UInt8]
+        switch req.cmd & ~Radio.readFlag {
+        case Radio.cmdLED: data = board.led
+        case Radio.cmdPalette: data = Array(board.palettePage.prefix(Wire.paletteLength))
+        case Radio.cmdCustom: data = board.custom
+        case Radio.cmdKeymap: data = Array(board.keymaps[sub & 7].prefix(Wire.keymapLength))
+        case Radio.cmdProfile: data = [100, 1]
+        default: unexpected.append(packet); return
+        }
+        var packets = Radio.splitPackets(cmd: req.cmd, sub: UInt8(sub), data: data)
+        if lossyAttempts > 0 {
+            lossyAttempts -= 1
+            packets = packets.enumerated().filter { $0.offset < 3 || $0.offset % 2 == 0 }.map(\.element)
+        }
+        inbox += packets
+    }
+
+    public func receive(timeout: TimeInterval) -> [UInt8]? { inbox.isEmpty ? nil : inbox.removeFirst() }
+    public func drain() { inbox.removeAll() }
+}
+
+public extension AulaKeyboard {
+    /// A simulated keyboard on the dongle or Bluetooth, for tests.
+    static func demoRadio(connection: Connection = .dongle) -> (AulaKeyboard, MockRadioChannel) {
+        let ch = MockRadioChannel()
+        let pid = connection == .bluetooth ? USBIDs.bluetoothPID : USBIDs.donglePID
+        let kb = AulaKeyboard(radio: ch,
+                              info: DeviceInfo(name: "AULA F75 (demo)", vendorID: USBIDs.dongleVID, productID: pid, transport: connection.title, isDemo: true),
+                              keysHeld: { false }, quiet: 0, sleeper: { _ in })
+        return (kb, ch)
+    }
+}

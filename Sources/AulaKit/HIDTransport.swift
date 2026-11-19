@@ -17,6 +17,31 @@ public struct DeviceInfo: Sendable, Equatable {
     public var productID: Int
     public var transport: String
     public var isDemo: Bool = false
+
+    public init(name: String, vendorID: Int, productID: Int, transport: String, isDemo: Bool = false) {
+        self.name = name; self.vendorID = vendorID; self.productID = productID; self.transport = transport; self.isDemo = isDemo
+    }
+
+    /// How the keyboard is connected, derived from its USB ids.
+    public var connection: Connection {
+        if vendorID == USBIDs.wiredVID { return .wired }
+        return productID == USBIDs.donglePID ? .dongle : .bluetooth
+    }
+}
+
+public enum Connection: String, Sendable, CaseIterable {
+    case wired, dongle, bluetooth
+
+    public var title: String {
+        switch self { case .wired: "USB cable"; case .dongle: "2.4G dongle"; case .bluetooth: "Bluetooth" }
+    }
+    public var symbol: String {
+        switch self { case .wired: "cable.connector"; case .dongle: "dot.radiowaves.left.and.right"; case .bluetooth: "wave.3.right" }
+    }
+    /// Settings (lighting, remaps, palettes) are only ever written over the cable.
+    public var canWrite: Bool { self == .wired }
+    /// Real-time lighting frames work on the cable and the dongle.
+    public var canLive: Bool { self != .bluetooth }
 }
 
 public enum USBIDs {
@@ -111,7 +136,6 @@ public enum HIDDiscovery {
         let all = enumerate()
         let wired = all.filter { $0.info.vendorID == USBIDs.wiredVID && $0.info.productID == USBIDs.wiredPID }
         guard !wired.isEmpty else {
-            if !all.isEmpty { throw AulaError.refused("the keyboard is connected wirelessly. Configuration works over the USB cable only — plug it in.") }
             throw AulaError.notFound
         }
         // The config collection is vendor defined (0xFF00) and carries a 520 byte feature report.

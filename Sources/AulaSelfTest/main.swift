@@ -193,5 +193,67 @@ test("backup / restore") {
     try expect(Backup.load(url).led == b.led)
 }
 
+test("radio packets: framing and checksum") {
+    let p = Radio.packet(cmd: 0x44, total: 3, index: 1, sub: 2, chunk: [1, 2, 3])
+    expect(p.count == 20 && p[0] == 0x13 && p[4] == 0x23 && p[5] == 1)
+    expect(Radio.parse(p) == Radio.Reply(cmd: 0x44, total: 3, index: 1, error: false, data: [1, 2, 3]))
+    var bad = p; bad[7] ^= 1
+    expect(Radio.parse(bad) == nil, "bad checksum")
+    expect(Radio.readRequest(cmd: 0x04, sub: 1)[1] == 0x44)
+    expect(Radio.splitPackets(cmd: 0x01, sub: 0, data: [UInt8](repeating: 7, count: 30)).count == 3)
+}
+test("radio: reads match the keyboard") {
+    let (kb, ch) = AulaKeyboard.demoRadio()
+    try expect(kb.readLED().raw == ch.board.led)
+    try expect(kb.readPalette() == Array(ch.board.palettePage.prefix(Wire.paletteLength)))
+    try expect(kb.readCustom() == ch.board.custom)
+    try expect(kb.readKeymap(layer: 1) == Array(ch.board.keymaps[1].prefix(Wire.keymapLength)))
+    expect(throwsError { try kb.readKeymap(layer: 0, system: 1) }, "Mac table isn't exposed")
+    try expect(kb.readBattery().level == 100)
+    expect(ch.unexpected.isEmpty)
+}
+test("radio: Bluetooth packet loss is retried") {
+    let (kb, ch) = AulaKeyboard.demoRadio(connection: .bluetooth)
+    ch.lossyAttempts = 3
+    try expect(kb.readLED().raw == ch.board.led)
+    expect(ch.requests.count >= 2, "had to ask again")
+}
+test("radio: settings are never written") {
+    let (kb, ch) = AulaKeyboard.demoRadio()
+    expect(throwsError { try kb.setEffect(3) })
+    expect(throwsError { try kb.writeCustom(Custom.encode(Themes.solid(RGB(9, 9, 9)))) })
+    expect(throwsError { try kb.writeKeymap(try kb.readKeymap()) })
+    expect(throwsError { try kb.writePalette(try kb.readPalette()) })
+    expect(ch.unexpected.isEmpty && ch.board.led == MockChannel().led)
+    expect(Set(ch.requests).isSubset(of: Set(Radio.readable.map { $0 | Radio.readFlag })), "only reads sent")
+}
+test("radio: live frames fit and use the live command") {
+    var colors: [Int: RGB] = [:]
+    for i in 0..<82 { colors[i] = RGB(i * 3, 255 - i * 3, (i * 37) % 256) }
+    let groups = Radio.liveGroups(colors)
+    expect(groups.count <= Radio.liveMax, "frame within 200 bytes")
+    var lit = 0, i = 0
+    while i < groups.count { let n = Int(groups[i + 3]); lit += n; i += 4 + n }
+    expect(i == groups.count && lit == 82, "every lit key listed once")
+    let (kb, ch) = AulaKeyboard.demoRadio()
+    try kb.sendLive(colors)
+    expect(!ch.livePackets.isEmpty && ch.livePackets.allSatisfy { $0[1] == 0x88 && Radio.parse($0) != nil })
+    let (bt, _) = AulaKeyboard.demoRadio(connection: .bluetooth)
+    expect(throwsError { try bt.sendLive(colors) }, "no live over Bluetooth")
+}
+test("radio: backup works without the Mac table") {
+    let (kb, ch) = AulaKeyboard.demoRadio()
+    let b = try Backup.capture(from: kb)
+    expect(b.keymapBaseMac == nil && b.led == Backup.hex(ch.board.led))
+    expect(throwsError { try b.restore(to: kb) }, "restoring needs the cable")
+}
+test("connection kinds") {
+    let wired = DeviceInfo(name: "x", vendorID: USBIDs.wiredVID, productID: USBIDs.wiredPID, transport: "")
+    let dongle = DeviceInfo(name: "x", vendorID: USBIDs.dongleVID, productID: USBIDs.donglePID, transport: "")
+    let bt = DeviceInfo(name: "x", vendorID: USBIDs.dongleVID, productID: USBIDs.bluetoothPID, transport: "")
+    expect(wired.connection == .wired && dongle.connection == .dongle && bt.connection == .bluetooth)
+    expect(wired.connection.canWrite && !dongle.connection.canWrite && dongle.connection.canLive && !bt.connection.canLive)
+}
+
 print("\n\(checks) checks, \(failures) failed")
 exit(failures == 0 ? 0 : 1)
