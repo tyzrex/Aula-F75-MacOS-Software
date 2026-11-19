@@ -10,6 +10,8 @@ let package = Package(
     ],
     targets: [
         .target(name: "AulaKit"),
-
+        // XCTest / swift-testing need a full Xcode; this self-contained runner works with the Command Line Tools:
+        //   swift run aula-selftest
+        .executableTarget(name: "aula-selftest", dependencies: ["AulaKit"], path: "Sources/AulaSelfTest"),
     ]
 )
