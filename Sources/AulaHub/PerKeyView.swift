@@ -8,35 +8,34 @@ struct PerKeyView: View {
     @Local private var themeName: String?
     @Local private var dirty = false
 
+    private var editable: Bool { model.canWrite && !model.busy }
+
     var body: some View {
-        HStack(alignment: .top, spacing: 0) {
-            VStack(spacing: 14) {
-                KeyboardCanvas(colors: draft, label: { $0.label },
-                               onTap: { paintKey($0) }, onDrag: { paintKey($0) })
-                    .frame(maxHeight: 320)
+        Screen("Per-Key RGB", subtitle: "Paint every key. Stored on the keyboard as the Custom effect.") {
+            Card {
+                KeyboardCanvas(colors: draft, flavor: model.flavor, onTap: { paintKey($0) }, onDrag: { paintKey($0) })
+                    .frame(maxWidth: .infinity)
                 HStack(spacing: 12) {
                     ColorPicker("Brush", selection: $paint, supportsOpacity: false)
                     Button("Fill all") { draft = Themes.solid(RGB(paint)); mark() }
                     Button("All off") { draft = Themes.solid(.black); mark() }
                     Spacer()
-                    Button("Reload from keyboard") { draft = model.custom; dirty = false; themeName = nil }
-                    Button("Apply to keyboard") {
+                    Button("Reload") { draft = model.custom; dirty = false; themeName = nil }.disabled(!dirty)
+                    Button {
                         let raw = Custom.encode(draft)
-                        model.perform("Per-key colors applied") { kb in
-                            try kb.writeCustom(raw)
-                            try kb.setEffect(Effects.customHW)
-                        }
+                        model.perform("Per-key colors applied") { kb in try kb.showCustom(raw) }
                         dirty = false
-                    }
-                    .buttonStyle(.borderedProminent).disabled(model.busy)
+                    } label: { Label("Apply to keyboard", systemImage: "checkmark") }
+                    .buttonStyle(.borderedProminent).disabled(!editable)
                 }
-                Text("Click or drag over keys to paint them. Applying switches the keyboard to the Custom effect.")
+                Text("Click or drag over keys to paint them. Applying switches the keyboard to the Custom effect; it goes dark for a moment while it repaints.")
                     .font(.caption).foregroundStyle(.secondary)
-                Spacer()
             }
-            .padding(20)
-            Divider()
-            themeList.frame(width: 260)
+            Card("Themes", subtitle: "A starting point — you can keep painting afterwards", systemImage: "paintpalette") {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 10)], spacing: 10) {
+                    ForEach(Themes.all) { t in themeTile(t) }
+                }
+            }
         }
         .onAppear { if draft.isEmpty { draft = model.custom } }
         .onChange(of: model.custom) { c in if !dirty { draft = c } }
@@ -48,23 +47,22 @@ struct PerKeyView: View {
         draft[k.index] = RGB(paint); mark()
     }
 
-    private var themeList: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("Themes").font(.headline).padding([.top, .horizontal], 14).padding(.bottom, 8)
-            List(Themes.all, selection: Binding(get: { themeName }, set: { n in
-                themeName = n
-                if let n, let t = Themes.named(n) { draft = t.render(); dirty = true }
-            })) { t in
-                HStack(spacing: 10) {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(LinearGradient(stops: t.stops.map { .init(color: $0.1.color, location: $0.0) }, startPoint: .leading, endPoint: .trailing))
-                        .frame(width: 46, height: 18)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(t.name.capitalized).font(.callout)
-                        Text(t.summary).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
-                    }
-                }.tag(t.name)
+    private func themeTile(_ t: Theme) -> some View {
+        Button {
+            themeName = t.name; draft = t.render(); dirty = true
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(LinearGradient(stops: t.stops.map { .init(color: $0.1.color, location: $0.0) }, startPoint: .leading, endPoint: .trailing))
+                    .frame(height: 26)
+                Text(t.name.capitalized).font(.callout.weight(.medium))
+                Text(t.summary).font(.caption2).foregroundStyle(.secondary).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
             }
+            .padding(8)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(themeName == t.name ? 0.10 : 0.04)))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(themeName == t.name ? Color.accentColor : Color.primary.opacity(0.08), lineWidth: themeName == t.name ? 2 : 1))
         }
+        .buttonStyle(.plain)
     }
 }

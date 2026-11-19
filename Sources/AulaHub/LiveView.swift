@@ -11,43 +11,43 @@ struct LiveView: View {
     private var theme: Theme? { Themes.named(themeName) }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+        Screen("Live Animations", subtitle: "Animated lighting rendered on this Mac and streamed to the keyboard") {
+            if !model.canLive {
+                Banner(systemImage: "wave.3.right", text: "Live lighting isn't available over \(model.connection?.title ?? "this connection"). Use the USB cable or the 2.4G dongle.")
+            } else if model.connection == .dongle {
+                Banner(systemImage: "info.circle", text: "Over the dongle, live frames show while the keyboard's lighting is set to Custom. Pick “Custom” on the keyboard (Fn + \\ cycles effects) or set it over the cable once.", tint: .blue)
+            }
+            Card {
                 TimelineView(.animation(minimumInterval: 1.0 / 30)) { tl in
                     KeyboardCanvas(colors: anim.frame(t: tl.date.timeIntervalSinceReferenceDate, color: RGB(color), theme: theme, brightness: brightness),
-                                   label: { _ in "" })
+                                   flavor: model.flavor)
                 }
-                .frame(maxHeight: 300)
-
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 8)], spacing: 8) {
+                .frame(maxWidth: .infinity)
+            }
+            Card("Animation", systemImage: "sparkles") {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 118), spacing: 8)], spacing: 8) {
                     ForEach(LiveAnimation.allCases) { a in
-                        Button { anim = a; if model.liveRunning != nil { start() } } label: { Text(a.title).frame(maxWidth: .infinity) }
-                            .buttonStyle(.bordered)
-                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(anim == a ? Color.accentColor : .clear, lineWidth: 2))
+                        Tile(title: a.title, systemImage: a.symbol, selected: anim == a, badge: nil) { anim = a; if model.liveRunning != nil { start() } }
                     }
                 }
-
-                GroupBox {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ColorPicker("Accent color", selection: $color, supportsOpacity: false)
-                        HStack { Text("Brightness").frame(width: 90, alignment: .leading); Slider(value: $brightness, in: 0.1...1) }
-                        if anim == .themeFlow {
-                            Picker("Theme", selection: $themeName) { ForEach(Themes.all) { Text($0.name.capitalized).tag($0.name) } }
-                        }
-                        HStack {
-                            if model.liveRunning == nil {
-                                Button("Stream to keyboard") { start() }.buttonStyle(.borderedProminent).disabled(model.busy)
-                            } else {
-                                Button("Stop") { model.stopLive() }.buttonStyle(.borderedProminent).tint(.red)
-                                Text("Streaming \(model.liveRunning?.title ?? "")…").foregroundStyle(.secondary)
-                            }
-                        }
-                        Text("Frames are rendered on this Mac and sent 20×/s. Nothing is saved on the keyboard — about 2 seconds after you stop (or quit the app) it returns to its own effect.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }.padding(6)
+                ColorPicker("Accent color", selection: $color, supportsOpacity: false)
+                SettingRow(title: "Brightness") { Slider(value: $brightness, in: 0.1...1) }
+                if anim == .themeFlow {
+                    Picker("Theme", selection: $themeName) { ForEach(Themes.all) { Text($0.name.capitalized).tag($0.name) } }
                 }
+                HStack {
+                    if model.liveRunning == nil {
+                        Button { start() } label: { Label("Stream to keyboard", systemImage: "play.fill") }
+                            .buttonStyle(.borderedProminent).disabled(model.busy || !model.canLive)
+                    } else {
+                        Button { model.stopLive() } label: { Label("Stop", systemImage: "stop.fill") }
+                            .buttonStyle(.borderedProminent).tint(.red)
+                        Text("Streaming \(model.liveRunning?.title ?? "")…").foregroundStyle(.secondary)
+                    }
+                }
+                Text("Nothing is saved on the keyboard — about 2 seconds after you stop (or quit the app) it returns to its own effect.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
-            .padding(20)
         }
         .onChange(of: color) { _ in if model.liveRunning != nil { start() } }
         .onChange(of: brightness) { _ in if model.liveRunning != nil { start() } }
