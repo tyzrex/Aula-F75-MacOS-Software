@@ -7,12 +7,14 @@ let package = Package(
     products: [
         .library(name: "AulaKit", targets: ["AulaKit"]),
         .executable(name: "aula", targets: ["aula"]),
+        .executable(name: "AulaHub", targets: ["AulaHub"]),
     ],
     targets: [
         .target(name: "AulaKit"),
+        .executableTarget(name: "aula", dependencies: ["AulaKit"]),
+        .executableTarget(name: "AulaHub", dependencies: ["AulaKit"]),
         // XCTest / swift-testing need a full Xcode; this self-contained runner works with the Command Line Tools:
         //   swift run aula-selftest
         .executableTarget(name: "aula-selftest", dependencies: ["AulaKit"], path: "Sources/AulaSelfTest"),
-        .executableTarget(name: "aula", dependencies: ["AulaKit"]),
     ]
 )
