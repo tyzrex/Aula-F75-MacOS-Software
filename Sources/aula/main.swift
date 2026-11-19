@@ -2,7 +2,7 @@ import Foundation
 import AulaKit
 
 let usage = """
-aula — AULA F75 control over the USB cable
+aula — AULA F75 control: full over the USB cable, read-only (plus live lighting on the dongle) over 2.4G / Bluetooth
 
   aula devices                          list AULA keyboards macOS can see
   aula info                             lighting, side light, knob, OS mode, sleep, firmware
@@ -13,24 +13,30 @@ aula — AULA F75 control over the USB cable
   aula fill <#rrggbb>                   one color on every key
   aula key-color <key> <#rrggbb>        paint one key (custom effect)
   aula palette <effect> <color> <#rrggbb> | palette-reset <effect>
-  aula live <animation> [seconds] [#rrggbb]   stream an animation (cable only); `aula live list`
+  aula live <animation> [seconds] [#rrggbb]   stream an animation (cable or dongle); `aula live list`
   aula keymap [--fn] [--mac]            show the keymap
   aula remap <key> <target> [--fn] [--mac]    e.g. remap capslock lctrl | remap f5 mute | remap #53 none
   aula side-light off|fill|breathing|static
   aula knob media|lighting
-  aula os windows|android|mac
+  aula os windows|android|mac           also: aula mode mac
   aula win-lock on|off
   aula sleep <minutes>                  30 s steps, max 20, never is refused
   aula battery
   aula backup [file] | restore <file> [--keymap] | backups
 
-options: --demo   use a simulated keyboard (no hardware needed)
+options: --demo            use a simulated keyboard (no hardware needed)
+         --via wired|dongle|bluetooth   insist on one connection (default: the cable if present)
 
 """
 
 var args = Array(CommandLine.arguments.dropFirst())
 let demo = args.contains("--demo")
 args.removeAll { $0 == "--demo" }
+var via: Connection?
+if let i = args.firstIndex(of: "--via") {
+    guard i + 1 < args.count, let c = Connection(rawValue: args[i + 1]) else { FileHandle.standardError.write(Data("aula: --via needs wired, dongle or bluetooth\n".utf8)); exit(1) }
+    via = c; args.removeSubrange(i...i + 1)
+}
 let flagFn = args.contains("--fn"), flagMac = args.contains("--mac"), flagKeymap = args.contains("--keymap")
 args.removeAll { ["--fn", "--mac", "--keymap"].contains($0) }
 
@@ -43,7 +49,7 @@ func option(_ name: String) -> String? {
 
 func connect() -> AulaKeyboard {
     if demo { return AulaKeyboard.demo().0 }
-    do { return try AulaKeyboard.connect() } catch { fail(error.localizedDescription) }
+    do { return try AulaKeyboard.connect(only: via) } catch { fail(error.localizedDescription) }
 }
 
 func rgb(_ s: String) -> RGB {
@@ -71,7 +77,7 @@ func run() throws {
         let all = HIDDiscovery.enumerate()
         if all.isEmpty { print("No AULA keyboard found.") }
         for c in all {
-            print(String(format: "%@  %04x:%04x  %@  usagePage 0x%04x  maxFeature %d", c.info.name, c.info.vendorID, c.info.productID, c.info.transport, c.usagePage, c.maxFeature))
+            print(String(format: "%@  %04x:%04x  %@  usagePage 0x%04x  maxFeature %d", c.info.name, c.info.vendorID, c.info.productID, c.info.connection.title, c.usagePage, c.maxFeature))
         }
 
     case "effects":
@@ -83,7 +89,7 @@ func run() throws {
     case "info":
         let kb = connect()
         let cfg = try kb.readLED()
-        print("device:     \(kb.info.name) (\(kb.info.transport))")
+        print("device:     \(kb.info.name) (\(kb.connection.title)\(kb.connection.canWrite ? "" : ", read-only"))")
         if let i = try? kb.readInfo() { print("firmware:   uuid \(i.uuid) version \(i.version)") }
         let e = Effects.byHW(cfg.effect)
         print("effect:     \(e?.name ?? "unknown (\(cfg.effect))")")
@@ -106,23 +112,20 @@ func run() throws {
     case "theme":
         guard let n = args.first, let t = Themes.named(n) else { fail("unknown theme; see `aula themes`") }
         let kb = connect()
-        try kb.writeCustom(Custom.encode(t.render()))
-        try kb.setEffect(Effects.customHW)
+        try kb.showCustom(Custom.encode(t.render()))
         print("theme → \(t.name)")
 
     case "fill":
         guard let h = args.first else { fail("usage: aula fill #rrggbb") }
         let kb = connect()
-        try kb.writeCustom(Custom.encode(Themes.solid(rgb(h))))
-        try kb.setEffect(Effects.customHW)
+        try kb.showCustom(Custom.encode(Themes.solid(rgb(h))))
 
     case "key-color":
         guard args.count >= 2, let idx = Keymap.index(of: args[0]) else { fail("usage: aula key-color <key> <#rrggbb>") }
         let kb = connect()
         var colors = Custom.decode(try kb.readCustom())
         colors[idx] = rgb(args[1])
-        try kb.writeCustom(Custom.encode(colors))
-        try kb.setEffect(Effects.customHW)
+        try kb.showCustom(Custom.encode(colors))
 
     case "palette":
         guard args.count == 3, let e = Effects.named(args[0]) else { fail("usage: aula palette <effect> <color 0-6> #rrggbb") }
@@ -164,7 +167,7 @@ func run() throws {
 
     case "side-light": try connect().updateLED { $0.sideMode = pick(Names.sideModes, args.first, "mode") }
     case "knob": try connect().updateLED { $0.knobMode = pick(Names.knobModes, args.first, "mode") }
-    case "os": try connect().updateLED { $0.osMode = pick(Names.osModes, args.first, "mode") }
+    case "os", "mode": try connect().updateLED { $0.osMode = pick(Names.osModes, args.first, "mode") }
     case "win-lock": try connect().updateLED { $0.winLock = args.first == "on" }
     case "sleep":
         guard let m = args.first.flatMap(Double.init) else { fail("usage: aula sleep <minutes>") }
