@@ -1,4 +1,4 @@
-# AULA Hub for macOS
+# Keylume for macOS
 
 A native Swift hub for the **AULA F75**: lighting effects and palettes, per-key RGB with themes, live animations,
 key remapping with Windows and Mac tables, device settings, and backup/restore — as a SwiftUI Mac app and a CLI.
@@ -17,10 +17,10 @@ have left an F75 unable to type until its firmware was reflashed, so the app ref
 Needs only the Command Line Tools (no Xcode).
 
 ```sh
-./scripts/build-app.sh      # → dist/"AULA Hub.app" and dist/aula
-swift run aula-selftest     # 180 checks against simulated keyboards (cable and radio)
-swift run aula --demo info  # try the CLI without hardware
-swift run AulaHub --demo    # try the app without hardware
+./scripts/build-app.sh      # → dist/"Keylume.app" and dist/keylumectl
+swift run keylume-selftest     # 180 checks against simulated keyboards (cable and radio)
+swift run keylumectl --demo info  # try the CLI without hardware
+swift run Keylume --demo    # try the app without hardware
 ```
 
 Quit the official AULA software first, and allow the app (or your terminal for the CLI) under
@@ -39,7 +39,7 @@ permission survives rebuilds (ad-hoc signatures change with every build).
 | Live Animations | rendered on the Mac, streamed at 20 fps over the cable (about 14 fps on the dongle) |
 | Key Remap | base/Fn layer × Windows/Mac table, legends for every key, quick changes, backup before each write |
 | Settings | mode, side light, knob, Windows/Command-key lock, sleep timer, firmware, battery |
-| Backups | everything the hub can read, in `~/Library/Application Support/AulaHub/backups` |
+| Backups | everything the hub can read, in `~/Library/Application Support/Keylume/backups` |
 
 It connects by itself when the cable is plugged in, notices when it is pulled out, and has menus and shortcuts
 (`⌘1`–`⌘7` pages, `⌘R` refresh, `⇧⌘B` backup, `⌃⌘W/M/A` Windows/Mac/Android mode).
@@ -47,7 +47,7 @@ It connects by itself when the cable is plugged in, notices when it is pulled ou
 ### Mac mode
 
 The keyboard has three OS modes (same as `Fn+W`, `Fn+E`, `Fn+Q`) and two key tables, Windows and Mac. Switch mode from
-the toolbar, the Keyboard page, Settings or the **Keyboard ▸ Mode** menu (or `aula mode mac`). In Mac mode:
+the toolbar, the Keyboard page, Settings or the **Keyboard ▸ Mode** menu (or `keylumectl mode mac`). In Mac mode:
 
 * keycaps in the app show Mac symbols — ⌘ ⌥ ⌃ ⇧ ⌫ ⏎ ⇥ — (Settings ▸ legends can force Windows or Mac);
 * the Key Remap page opens on the Mac table;
@@ -57,16 +57,16 @@ The Win key sends ⌘ Command and Alt sends ⌥ Option on macOS regardless of th
 
 ## CLI
 
-`aula help`. Examples:
+`keylumectl help`. Examples:
 
 ```sh
-aula info
-aula mode mac
-aula theme synthwave
-aula remap capslock lctrl
-aula --via dongle keymap          # read-only over 2.4G
-aula --via dongle live rainbow-wave 10
-aula backup
+keylumectl info
+keylumectl mode mac
+keylumectl theme synthwave
+keylumectl remap capslock lctrl
+keylumectl --via dongle keymap          # read-only over 2.4G
+keylumectl --via dongle live rainbow-wave 10
+keylumectl backup
 ```
 
 ## Safety
@@ -81,6 +81,6 @@ aula backup
 
 ## Credits and layout
 
-See `NOTICE`. Source layout: `Sources/AulaKit` (protocol, models, legends), `Sources/aula` (CLI),
-`Sources/AulaHub` (app), `Sources/AulaSelfTest` (tests), `scripts/` (build, icon), `Resources/` (app icon).
-`AulaHub --demo --snapshot <dir>` renders the pages to PNG files for checking the interface from the command line.
+See `NOTICE`. Source layout: `Sources/KeylumeKit` (protocol, models, legends), `Sources/keylumectl` (CLI),
+`Sources/Keylume` (app), `Sources/KeylumeSelfTest` (tests), `scripts/` (build, icon), `Resources/` (app icon).
+`Keylume --demo --snapshot <dir>` renders the pages to PNG files for checking the interface from the command line.

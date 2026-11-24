@@ -3,7 +3,7 @@ import Foundation
 /// High level access to a keyboard. On the cable everything works and every write is verified by
 /// reading back. Over the 2.4G dongle and Bluetooth the keyboard can be read (and, on the dongle,
 /// driven with live lighting); settings are never written over the radio.
-public final class AulaKeyboard: @unchecked Sendable {
+public final class F75Keyboard: @unchecked Sendable {
     public let info: DeviceInfo
     private let channel: FeatureChannel?
     private let radio: PacketChannel?
@@ -30,17 +30,17 @@ public final class AulaKeyboard: @unchecked Sendable {
 
     /// The cable wins; with the switch on 2.4G or Bluetooth the radio interface is used.
     /// Pass `only` to insist on one kind of connection.
-    public static func connect(only: Connection? = nil) throws -> AulaKeyboard {
+    public static func connect(only: Connection? = nil) throws -> F75Keyboard {
         if only == nil || only == .wired {
             do {
                 let (ch, info) = try HIDDiscovery.openWired()
-                return AulaKeyboard(channel: ch, info: info)
-            } catch AulaError.notFound where only == nil {
+                return F75Keyboard(channel: ch, info: info)
+            } catch KeylumeError.notFound where only == nil {
                 // fall through to the radio
             }
         }
         let (ch, info) = try HIDDiscovery.openRadio(only: only)
-        let kb = AulaKeyboard(radio: ch, info: info)
+        let kb = F75Keyboard(radio: ch, info: info)
         try kb.probe()
         return kb
     }
@@ -55,13 +55,13 @@ public final class AulaKeyboard: @unchecked Sendable {
     /// Over Bluetooth only about one packet in three gets through, so the big tables (27-36 packets) never complete.
     private func requireBulkRead(_ what: String) throws {
         if info.connection == .bluetooth {
-            throw AulaError.refused("\(what) are too large to read over Bluetooth (the link drops most packets). Use the 2.4G dongle or the USB cable.")
+            throw KeylumeError.refused("\(what) are too large to read over Bluetooth (the link drops most packets). Use the 2.4G dongle or the USB cable.")
         }
     }
 
     private func requireWired() throws {
         guard info.connection.canWrite else {
-            throw AulaError.refused("settings are only written over the USB cable, never over \(info.connection.title). Plug the keyboard in to change them (reading, backups and live lighting still work wirelessly).")
+            throw KeylumeError.refused("settings are only written over the USB cable, never over \(info.connection.title). Plug the keyboard in to change them (reading, backups and live lighting still work wirelessly).")
         }
     }
 
@@ -72,20 +72,20 @@ public final class AulaKeyboard: @unchecked Sendable {
     private func waitKeysReleased() throws {
         var waited = 0.0
         while keysHeld() {
-            if waited > 3 { throw AulaError.refused("a key is held down; release it and try again") }
+            if waited > 3 { throw KeylumeError.refused("a key is held down; release it and try again") }
             sleeper(0.02); waited += 0.02
         }
     }
 
     private var cable: FeatureChannel {
         get throws {
-            guard let channel else { throw AulaError.refused("this is not a cable connection") }
+            guard let channel else { throw KeylumeError.refused("this is not a cable connection") }
             return channel
         }
     }
 
     private func wiredGet(cmd: UInt8, sub: UInt8 = 0, asked: Int, length: Int, magicAt: Int? = nil, magic: [UInt8] = Wire.ledMagic) throws -> [UInt8] {
-        guard !Wire.forbidden.contains(cmd) else { throw AulaError.refused(String(format: "command 0x%02x is never sent", cmd)) }
+        guard !Wire.forbidden.contains(cmd) else { throw KeylumeError.refused(String(format: "command 0x%02x is never sent", cmd)) }
         for _ in 0..<3 {
             try waitKeysReleased()
             try cable.setFeature(Wire.request(cmd: cmd, sub: sub, length: asked))
@@ -98,12 +98,12 @@ public final class AulaKeyboard: @unchecked Sendable {
             }
             sleeper(0.1)
         }
-        throw AulaError.noReply(String(format: "no matching reply to 0x%02x from the keyboard; try again", cmd))
+        throw KeylumeError.noReply(String(format: "no matching reply to 0x%02x from the keyboard; try again", cmd))
     }
 
     private func wiredPut(cmd: UInt8, sub: UInt8 = 0, data: [UInt8], declaredLength: Int? = nil, readBack: () throws -> [UInt8]) throws {
         guard [Wire.writeLED, Wire.writePalette, Wire.writeCustom, Wire.writeKeymap].contains(cmd) else {
-            throw AulaError.refused(String(format: "0x%02x is not a known write command", cmd))
+            throw KeylumeError.refused(String(format: "0x%02x is not a known write command", cmd))
         }
         try waitKeysReleased()
         try cable.setFeature(try Wire.writeReport(cmd: cmd, sub: sub, data: data, declaredLength: declaredLength))
@@ -111,9 +111,9 @@ public final class AulaKeyboard: @unchecked Sendable {
         sleeper(Wire.settle)
         let back: [UInt8]
         do { back = try readBack() } catch {
-            throw AulaError.verifyFailed(String(format: "write 0x%02x was sent but couldn't be checked (%@); read the keyboard again to see its state", cmd, error.localizedDescription))
+            throw KeylumeError.verifyFailed(String(format: "write 0x%02x was sent but couldn't be checked (%@); read the keyboard again to see its state", cmd, error.localizedDescription))
         }
-        if back != data { throw AulaError.verifyFailed(String(format: "the keyboard didn't keep write 0x%02x (the read-back differs)", cmd)) }
+        if back != data { throw KeylumeError.verifyFailed(String(format: "the keyboard didn't keep write 0x%02x (the read-back differs)", cmd)) }
     }
 
     // MARK: reads
@@ -146,12 +146,12 @@ public final class AulaKeyboard: @unchecked Sendable {
 
     /// 126 entries × 4 bytes. `layer` 0 = base, 1 = Fn; `system` 0 = Windows table, 1 = Mac table.
     public func readKeymap(layer: Int = 0, system: Int = 0) throws -> [UInt8] {
-        guard (0...3).contains(layer), (0...1).contains(system) else { throw AulaError.refused("layer must be 0-3, system 0-1") }
+        guard (0...3).contains(layer), (0...1).contains(system) else { throw KeylumeError.refused("layer must be 0-3, system 0-1") }
         return try sync {
             if radio != nil {
                 try requireBulkRead("key tables")
                 // The radio protocol only exposes the Windows table, layers 0 and 1.
-                guard system == 0, layer <= 1 else { throw AulaError.refused("only the base and Fn layers of the Windows table can be read over \(info.connection.title); connect the cable for the Mac table") }
+                guard system == 0, layer <= 1 else { throw KeylumeError.refused("only the base and Fn layers of the Windows table can be read over \(info.connection.title); connect the cable for the Mac table") }
                 return try radioGet(cmd: Radio.cmdKeymap, sub: UInt8(layer), length: Wire.keymapLength)
             }
             return try wiredGet(cmd: Wire.readKeymap, sub: Wire.keymapSub(layer: layer, system: system), asked: Wire.keymapLength, length: Wire.keymapLength)
@@ -161,7 +161,7 @@ public final class AulaKeyboard: @unchecked Sendable {
     /// Firmware identity as the official app reads it: 6-byte UUID, 2-byte version.
     public func readInfo() throws -> (uuid: String, version: String) {
         try sync {
-            guard radio == nil else { throw AulaError.refused("firmware info can only be read over the USB cable") }
+            guard radio == nil else { throw KeylumeError.refused("firmware info can only be read over the USB cable") }
             let d = try wiredGet(cmd: Wire.readInfo, sub: 1, asked: 10, length: 10)
             let hex = { (b: ArraySlice<UInt8>) in b.map { String(format: "%02x", $0) }.joined() }
             return ("0x" + hex(d[0..<6]), "0x" + hex(d[6..<8]))
@@ -192,17 +192,17 @@ public final class AulaKeyboard: @unchecked Sendable {
         try requireWired()
         let raw = cfg.raw
         guard raw.count == Wire.ledLength, Array(raw.suffix(2)) == Wire.ledMagic else {
-            throw AulaError.refused("the LED block is damaged (it has to end in 5a a5)")
+            throw KeylumeError.refused("the LED block is damaged (it has to end in 5a a5)")
         }
         // A keyboard that never sleeps drains its battery with the lights on.
-        guard cfg.sleep != 0 else { throw AulaError.refused("sleep 'never' is not allowed; pick a sleep time") }
+        guard cfg.sleep != 0 else { throw KeylumeError.refused("sleep 'never' is not allowed; pick a sleep time") }
         try sync {
             let current = try readLED().raw
             var allowed = LEDConfig.writable
             if let o = LEDConfig.slotOffset(cfg.effect) { allowed.insert(o); allowed.insert(o + 1) }
             let changed = (0..<Wire.ledLength).filter { raw[$0] != current[$0] }
             let unknown = changed.filter { !allowed.contains($0) }
-            guard unknown.isEmpty else { throw AulaError.refused("the write would change LED bytes \(unknown), whose meaning is unknown") }
+            guard unknown.isEmpty else { throw KeylumeError.refused("the write would change LED bytes \(unknown), whose meaning is unknown") }
             if !changed.isEmpty {
                 try wiredPut(cmd: Wire.writeLED, data: raw) { try self.readLED().raw }
             }
@@ -222,7 +222,7 @@ public final class AulaKeyboard: @unchecked Sendable {
 
     public func writePalette(_ palette: [UInt8]) throws {
         try requireWired()
-        guard palette.count == Wire.paletteLength else { throw AulaError.refused("effect palettes must be \(Wire.paletteLength) bytes") }
+        guard palette.count == Wire.paletteLength else { throw KeylumeError.refused("effect palettes must be \(Wire.paletteLength) bytes") }
         try sync {
             let page = try readPalettePage()
             let new = palette + page[Wire.paletteLength...]
@@ -236,7 +236,7 @@ public final class AulaKeyboard: @unchecked Sendable {
 
     public func writeCustom(_ raw: [UInt8], force: Bool = false) throws {
         try requireWired()
-        guard raw.count == Wire.customLength else { throw AulaError.refused("per-key color table must be \(Wire.customLength) bytes") }
+        guard raw.count == Wire.customLength else { throw KeylumeError.refused("per-key color table must be \(Wire.customLength) bytes") }
         try sync {
             if !force, raw == (try readCustom()) { return }
             try wiredPut(cmd: Wire.writeCustom, data: raw) { try self.readCustom() }
@@ -247,12 +247,12 @@ public final class AulaKeyboard: @unchecked Sendable {
     /// the 504 key bytes, six zero bytes and `5a a5`. Read back and compared.
     public func writeKeymap(_ keymap: [UInt8], layer: Int = 0, system: Int = 0) throws {
         try requireWired()
-        guard keymap.count == Wire.keymapLength, (0...3).contains(layer), (0...1).contains(system) else { throw AulaError.refused("bad keymap") }
+        guard keymap.count == Wire.keymapLength, (0...3).contains(layer), (0...1).contains(system) else { throw KeylumeError.refused("bad keymap") }
         try sync {
             let sub = Wire.keymapSub(layer: layer, system: system)
             let current = try readKeymap(layer: layer, system: system)
             guard current.contains(where: { $0 != 0 }) else {
-                throw AulaError.refused("the keyboard returned an empty keymap; not writing over it")
+                throw KeylumeError.refused("the keyboard returned an empty keymap; not writing over it")
             }
             if keymap == current { return }
             let page = keymap + [UInt8](repeating: 0, count: Wire.keymapPage - Wire.keymapLength - 2) + Wire.ledMagic
@@ -272,13 +272,13 @@ public final class AulaKeyboard: @unchecked Sendable {
         if wait > 0 { sleeper(wait) }
         lastLive = Date()
         let report = Wire.liveReport(colors: colors)
-        guard Array(report.prefix(Wire.headerLength)) == Wire.liveHeader else { throw AulaError.refused("wrong header for a live frame") }
+        guard Array(report.prefix(Wire.headerLength)) == Wire.liveHeader else { throw KeylumeError.refused("wrong header for a live frame") }
         try sync { try cable.setFeature(report) }
     }
 
     // MARK: radio (2.4G dongle / Bluetooth)
 
-    private var debugRadio: Bool { ProcessInfo.processInfo.environment["AULA_DEBUG"] != nil }
+    private var debugRadio: Bool { ProcessInfo.processInfo.environment["KEYLUME_DEBUG"] != nil }
 
     private var lastKeyActivity = Date.distantPast
 
@@ -290,7 +290,7 @@ public final class AulaKeyboard: @unchecked Sendable {
             if keysHeld() { lastKeyActivity = Date() }
             let idle = Date().timeIntervalSince(lastKeyActivity)
             if idle >= radioQuiet { return }
-            if Date().timeIntervalSince(start) > 5 { throw AulaError.refused("a key is held down; release it and try again") }
+            if Date().timeIntervalSince(start) > 5 { throw KeylumeError.refused("a key is held down; release it and try again") }
             sleeper(0.02)
         }
     }
@@ -302,8 +302,8 @@ public final class AulaKeyboard: @unchecked Sendable {
     /// Sending several requests a little apart restarts the burst out of phase, which lets other indexes through.
     /// Parts are collected across attempts until the reply is complete.
     private func radioGet(cmd: UInt8, sub: UInt8 = 0, length: Int, magicAt: Int? = nil, attempts: Int? = nil) throws -> [UInt8] {
-        guard let radio else { throw AulaError.refused("this is not a radio connection") }
-        guard Radio.readable.contains(cmd) else { throw AulaError.refused(String(format: "0x%02x is not a known read command", cmd)) }
+        guard let radio else { throw KeylumeError.refused("this is not a radio connection") }
+        guard Radio.readable.contains(cmd) else { throw KeylumeError.refused(String(format: "0x%02x is not a known read command", cmd)) }
         let bluetooth = info.connection == .bluetooth
         let requests = bluetooth ? 4 : 1
         var parts: [Int: [UInt8]] = [:]
@@ -323,19 +323,19 @@ public final class AulaKeyboard: @unchecked Sendable {
                 guard let raw = radio.receive(timeout: 0.005) else { continue }
                 if debugRadio { FileHandle.standardError.write(Data("rx \(raw.map { String(format: "%02x", $0) }.joined(separator: " "))\n".utf8)) }
                 guard let rep = Radio.parse(raw), rep.cmd == cmd | Radio.readFlag else { continue }
-                if rep.error { throw AulaError.protocolError(String(format: "the keyboard rejected read 0x%02x", cmd | Radio.readFlag)) }
+                if rep.error { throw KeylumeError.protocolError(String(format: "the keyboard rejected read 0x%02x", cmd | Radio.readFlag)) }
                 last = Date(); total = rep.total
                 if rep.index < rep.total { parts[rep.index] = rep.data }
                 if rep.total > 0, parts.count == rep.total {
                     let data = (0..<rep.total).flatMap { parts[$0] ?? [] }
-                    guard data.count >= length else { throw AulaError.protocolError("short reply to 0x\(String(cmd, radix: 16)): \(data.count) of \(length) bytes") }
+                    guard data.count >= length else { throw KeylumeError.protocolError("short reply to 0x\(String(cmd, radix: 16)): \(data.count) of \(length) bytes") }
                     let out = Array(data.prefix(length))
                     if let m = magicAt, Array(out[m..<m + 2]) != Wire.ledMagic { parts.removeAll(); break }
                     return out
                 }
             }
         }
-        throw AulaError.noReply(total == nil
+        throw KeylumeError.noReply(total == nil
             ? "the keyboard didn't answer. It may be asleep: press any key to wake it, then try again"
             : "the wireless link kept dropping packets; move closer or use the cable")
     }
@@ -343,14 +343,14 @@ public final class AulaKeyboard: @unchecked Sendable {
     /// One live frame over the dongle: groups of keys sharing a color, sent as packets 5 ms apart.
     /// The keyboard shows the custom effect's frames; ~2 s without frames it returns to its own effect.
     private func sendRadioLive(_ colors: [Int: RGB]) throws {
-        guard info.connection.canLive else { throw AulaError.refused("live lighting isn't supported over Bluetooth; use the dongle or the cable") }
+        guard info.connection.canLive else { throw KeylumeError.refused("live lighting isn't supported over Bluetooth; use the dongle or the cable") }
         guard let radio else { return }
         let packets = Radio.liveFrame(colors)
         let wait = lastLive.addingTimeInterval(Double(packets.count) * Radio.liveGap + 0.03).timeIntervalSinceNow
         if wait > 0 { sleeper(wait) }
         try sync {
             for p in packets {
-                guard p[1] == Radio.cmdLive else { throw AulaError.refused("only live frames may be written over the radio") }
+                guard p[1] == Radio.cmdLive else { throw KeylumeError.refused("only live frames may be written over the radio") }
                 try radio.write(p)
                 sleeper(Radio.liveGap)
             }
@@ -370,7 +370,7 @@ public final class AulaKeyboard: @unchecked Sendable {
     }
 
     public func setEffect(_ hw: Int, brightness: Int? = nil, speed: Int? = nil, color: Int? = nil) throws {
-        guard Effects.byHW(hw) != nil else { throw AulaError.refused("unknown effect \(hw)") }
+        guard Effects.byHW(hw) != nil else { throw KeylumeError.refused("unknown effect \(hw)") }
         try updateLED { cfg in
             cfg.effect = hw
             if var s = cfg.slot(hw) {

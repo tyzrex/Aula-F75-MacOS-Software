@@ -115,7 +115,7 @@ public protocol PacketChannel: AnyObject {
 /// The radio configuration interface (usage page 0xFF02, report 0x13) through IOKit.
 public final class RadioChannel: PacketChannel, @unchecked Sendable {
     private let device: IOHIDDevice
-    private let queue = DispatchQueue(label: "aula.radio.input")
+    private let queue = DispatchQueue(label: "keylume.radio.input")
     private let lock = NSCondition()
     private var inbox: [[UInt8]] = []
     private var buffer: UnsafeMutablePointer<UInt8>
@@ -131,7 +131,7 @@ public final class RadioChannel: PacketChannel, @unchecked Sendable {
     func open() throws {
         let r = IOHIDDeviceOpen(device, IOOptionBits(kIOHIDOptionsTypeNone))
         guard r == kIOReturnSuccess else {
-            throw AulaError.openFailed(r == kIOReturnNotPermitted
+            throw KeylumeError.openFailed(r == kIOReturnNotPermitted
                 ? "macOS blocked access. Allow this app under System Settings → Privacy & Security → Input Monitoring, then restart it."
                 : String(format: "IOKit error 0x%08x", r))
         }
@@ -172,7 +172,7 @@ public final class RadioChannel: PacketChannel, @unchecked Sendable {
             IOHIDDeviceSetReport(device, kIOHIDReportTypeOutput, CFIndex(packet[0]), $0.baseAddress!, packet.count)
         }
         guard r == kIOReturnSuccess else {
-            throw AulaError.noReply(r == kIOReturnNotPermitted
+            throw KeylumeError.noReply(r == kIOReturnNotPermitted
                 ? "macOS denied access — grant Input Monitoring permission."
                 : String(format: "sending to the keyboard failed (IOKit 0x%08x)", r))
         }
@@ -194,13 +194,13 @@ public extension HIDDiscovery {
     /// Open the radio configuration interface of a keyboard on the dongle or Bluetooth.
     static func openRadio(only: Connection? = nil) throws -> (RadioChannel, DeviceInfo) {
         let radio = enumerate().filter { $0.info.vendorID == USBIDs.dongleVID && (only == nil || $0.info.connection == only) }
-        guard !radio.isEmpty else { throw AulaError.notFound }
+        guard !radio.isEmpty else { throw KeylumeError.notFound }
         // The configuration collection is vendor defined: 0xFF02 on the dongle.
         // On the dongle it is its own interface; over Bluetooth it is one collection of the keyboard device.
         let pick = radio.first { $0.usagePage == 0xFF02 } ?? radio.first { $0.usagePages.contains(0xFF02) }
             ?? radio.first { $0.usagePage >= 0xFF00 }
         guard let c = pick else {
-            throw AulaError.refused("the keyboard's wireless configuration interface isn't visible to macOS")
+            throw KeylumeError.refused("the keyboard's wireless configuration interface isn't visible to macOS")
         }
         let ch = RadioChannel(device: c.device)
         try ch.open()

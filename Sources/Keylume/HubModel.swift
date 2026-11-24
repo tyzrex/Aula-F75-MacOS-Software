@@ -1,5 +1,5 @@
 import SwiftUI
-import AulaKit
+import KeylumeKit
 
 struct Notice: Identifiable { let id = UUID(); let text: String; let isError: Bool }
 
@@ -16,12 +16,13 @@ enum Prefs {
     static let autoConnect = "autoConnect"
     static let legends = "legendPreference"
     static let liveBrightness = "liveBrightness"
-    static func register() { UserDefaults.standard.register(defaults: [autoConnect: true, legends: LegendPreference.auto.rawValue]) }
+    static let menuBar = "showInMenuBar"
+    static func register() { UserDefaults.standard.register(defaults: [autoConnect: true, legends: LegendPreference.auto.rawValue, menuBar: true]) }
 }
 
 @MainActor
 final class HubModel: ObservableObject {
-    @Published var keyboard: AulaKeyboard?
+    @Published var keyboard: F75Keyboard?
     @Published var connecting = false
     @Published var busy = false
     @Published var notice: Notice?
@@ -33,11 +34,11 @@ final class HubModel: ObservableObject {
     @Published var palette: [UInt8]?
     @Published var custom: [Int: RGB] = [:]
     @Published var keymaps: [KeymapID: [UInt8]] = [:]
-    @Published var battery: AulaKeyboard.Battery?
+    @Published var battery: F75Keyboard.Battery?
     @Published var firmware: String?
     @Published var liveRunning: LiveAnimation?
 
-    private let io = DispatchQueue(label: "aula.io")
+    private let io = DispatchQueue(label: "keylume.io")
     private var liveTask: Task<Void, Never>?
     private var watcher: Timer?
     private var missedPolls = 0
@@ -106,7 +107,7 @@ final class HubModel: ObservableObject {
         connecting = true; connectError = nil
         Task {
             do {
-                let kb: AulaKeyboard = try await onIO { demo ? AulaKeyboard.demo().0 : try AulaKeyboard.connect(only: only) }
+                let kb: F75Keyboard = try await onIO { demo ? F75Keyboard.demo().0 : try F75Keyboard.connect(only: only) }
                 stopLive()
                 keyboard = kb
                 missedPolls = 0
@@ -130,7 +131,7 @@ final class HubModel: ObservableObject {
         guard let kb = keyboard else { return }
         struct Snapshot: Sendable {
             var led: LEDConfig; var palette: [UInt8]?; var custom: [UInt8]?; var maps: [KeymapID: [UInt8]]
-            var battery: AulaKeyboard.Battery?; var firmware: String?
+            var battery: F75Keyboard.Battery?; var firmware: String?
         }
         do {
             let snap: Snapshot = try await onIO {
@@ -144,7 +145,8 @@ final class HubModel: ObservableObject {
                                 battery: try? kb.readBattery(), firmware: info.map { "uuid \($0.uuid) · version \($0.version)" })
             }
             led = snap.led; palette = snap.palette; custom = snap.custom.map(Custom.decode) ?? [:]; keymaps = snap.maps
-            battery = snap.battery; firmware = snap.firmware
+            // The cable reports 0 % while charging, which says nothing about the battery.
+            battery = (kb.connection == .wired && (snap.battery?.level ?? 0) == 0) ? nil : snap.battery; firmware = snap.firmware
         } catch {
             show(error)
         }
@@ -153,7 +155,7 @@ final class HubModel: ObservableObject {
     // MARK: writing
 
     /// Run a write on the keyboard, then re-read its state. Stops a running live animation first.
-    func perform(_ title: String, refreshAfter: Bool = true, _ op: @escaping @Sendable (AulaKeyboard) throws -> Void) {
+    func perform(_ title: String, refreshAfter: Bool = true, _ op: @escaping @Sendable (F75Keyboard) throws -> Void) {
         guard let kb = keyboard, !busy else { return }
         stopLive()
         busy = true

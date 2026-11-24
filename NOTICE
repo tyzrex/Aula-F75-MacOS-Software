@@ -1,9 +1,9 @@
-AULA Hub (this project) is an independent, unofficial tool.
+Keylume (this project) is an independent, unofficial tool.
 
 The wired protocol notes and the key layout/themes were cross-checked against, and partly derived from,
 bakiakyol/aula-f75-hub (MIT License, https://github.com/bakiakyol/aula-f75-hub), which in turn credits
-whiskey00/lumen75, Dahuum/aula-studio and cloudglides/aula-f75-linux-drivers (all MIT).
-Sources/AulaKit/Layout.swift and ThemeData.swift are generated from that project's tables.
+whiskey00/lumen75, Dahuum/keylumectl-studio and cloudglides/keylumectl-f75-linux-drivers (all MIT).
+Sources/KeylumeKit/Layout.swift and ThemeData.swift are generated from that project's tables.
 
 The keymap write layout was confirmed against the JavaScript of the official "Aula Hub" 1.1.22 (read for interoperability).
 No vendor code or assets are included.

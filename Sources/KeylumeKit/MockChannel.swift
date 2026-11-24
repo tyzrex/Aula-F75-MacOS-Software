@@ -41,7 +41,7 @@ public final class MockChannel: FeatureChannel, @unchecked Sendable {
     }
 
     public func setFeature(_ bytes: [UInt8]) throws {
-        guard bytes.count == Wire.reportLength, bytes[0] == Wire.reportID else { throw AulaError.protocolError("mock: bad report") }
+        guard bytes.count == Wire.reportLength, bytes[0] == Wire.reportID else { throw KeylumeError.protocolError("mock: bad report") }
         let cmd = bytes[1], sub = bytes[2]
         log.append(cmd)
         let len = Int(bytes[6]) | Int(bytes[7]) << 8
@@ -61,7 +61,7 @@ public final class MockChannel: FeatureChannel, @unchecked Sendable {
         case Wire.writeCustom: if !dropWrites { custom = data }
         case Wire.writeKeymap: if !dropWrites { keymaps[Int(sub) & 7] = data }
         case Wire.live: liveFrames.append(bytes)
-        default: throw AulaError.protocolError(String(format: "mock: unexpected command 0x%02x", cmd))
+        default: throw KeylumeError.protocolError(String(format: "mock: unexpected command 0x%02x", cmd))
         }
     }
 
@@ -71,11 +71,11 @@ public final class MockChannel: FeatureChannel, @unchecked Sendable {
     }
 }
 
-public extension AulaKeyboard {
+public extension F75Keyboard {
     /// A simulated keyboard (demo mode) and its channel for inspection.
-    static func demo() -> (AulaKeyboard, MockChannel) {
+    static func demo() -> (F75Keyboard, MockChannel) {
         let ch = MockChannel()
-        let kb = AulaKeyboard(channel: ch,
+        let kb = F75Keyboard(channel: ch,
                               info: DeviceInfo(name: "AULA F75 (demo)", vendorID: USBIDs.wiredVID, productID: USBIDs.wiredPID, transport: "simulated", isDemo: true),
                               keysHeld: { false }, sleeper: { _ in })
         return (kb, ch)
@@ -121,12 +121,12 @@ public final class MockRadioChannel: PacketChannel, @unchecked Sendable {
     public func drain() { inbox.removeAll() }
 }
 
-public extension AulaKeyboard {
+public extension F75Keyboard {
     /// A simulated keyboard on the dongle or Bluetooth, for tests.
-    static func demoRadio(connection: Connection = .dongle) -> (AulaKeyboard, MockRadioChannel) {
+    static func demoRadio(connection: Connection = .dongle) -> (F75Keyboard, MockRadioChannel) {
         let ch = MockRadioChannel()
         let pid = connection == .bluetooth ? USBIDs.bluetoothPID : USBIDs.donglePID
-        let kb = AulaKeyboard(radio: ch,
+        let kb = F75Keyboard(radio: ch,
                               info: DeviceInfo(name: "AULA F75 (demo)", vendorID: USBIDs.dongleVID, productID: pid, transport: connection.title, isDemo: true),
                               keysHeld: { false }, quiet: 0, sleeper: { _ in })
         return (kb, ch)

@@ -60,7 +60,7 @@ public enum Wire {
     /// `declaredLength` is the length field of the header; it defaults to the data size
     /// (the keymap write declares 504 bytes but carries a 512-byte page, like the official app).
     public static func writeReport(cmd: UInt8, sub: UInt8 = 0, data: [UInt8], declaredLength: Int? = nil) throws -> [UInt8] {
-        guard data.count <= reportLength - headerLength else { throw AulaError.protocolError("too much data for one report") }
+        guard data.count <= reportLength - headerLength else { throw KeylumeError.protocolError("too much data for one report") }
         var r = request(cmd: cmd, sub: sub, length: declaredLength ?? data.count)
         r.replaceSubrange(headerLength..<headerLength + data.count, with: data)
         return r
@@ -88,7 +88,7 @@ public enum Wire {
     }
 }
 
-public enum AulaError: Error, LocalizedError, Equatable {
+public enum KeylumeError: Error, LocalizedError, Equatable {
     case notFound
     case openFailed(String)
     case protocolError(String)
@@ -231,7 +231,7 @@ public struct LEDConfig: Equatable, Sendable {
 
     public init(raw: [UInt8]) throws {
         guard raw.count == Wire.ledLength, Array(raw.suffix(2)) == Wire.ledMagic else {
-            throw AulaError.protocolError("unexpected LED config block")
+            throw KeylumeError.protocolError("unexpected LED config block")
         }
         self.raw = raw
     }
@@ -250,7 +250,7 @@ public struct LEDConfig: Equatable, Sendable {
     public var sleep: Int { Int(raw[Self.sleepOffset]) * Self.sleepUnit }
     public mutating func setSleep(_ seconds: Int) throws {
         guard seconds % Self.sleepUnit == 0, (0...Self.sleepMax).contains(seconds) else {
-            throw AulaError.refused("sleep time must be a multiple of 30 s, at most 20 min")
+            throw KeylumeError.refused("sleep time must be a multiple of 30 s, at most 20 min")
         }
         raw[Self.sleepOffset] = UInt8(seconds / Self.sleepUnit)
     }
@@ -266,7 +266,7 @@ public struct LEDConfig: Equatable, Sendable {
 
     public mutating func setSlot(_ hw: Int, _ s: EffectSlot) throws {
         guard let o = Self.slotOffset(hw), (0...9).contains(s.brightness), (0...4).contains(s.speed), (0...7).contains(s.color) else {
-            throw AulaError.refused("brightness must be 0-9, speed 0-4, color 0-7")
+            throw KeylumeError.refused("brightness must be 0-9, speed 0-4, color 0-7")
         }
         raw[o] = UInt8(s.brightness)
         raw[o + 1] = UInt8(s.speed << 4 | s.color)
@@ -283,8 +283,8 @@ public enum Palette {
                                         RGB(255, 0, 255), RGB(0, 255, 255), RGB(255, 255, 255)]
 
     static func offset(_ hw: Int, _ color: Int) throws -> Int {
-        guard (0..<count).contains(hw) else { throw AulaError.refused("effect \(hw) has no palette") }
-        guard (0..<colors).contains(color) else { throw AulaError.refused("color must be 0-6") }
+        guard (0..<count).contains(hw) else { throw KeylumeError.refused("effect \(hw) has no palette") }
+        guard (0..<colors).contains(color) else { throw KeylumeError.refused("color must be 0-6") }
         return hw * colors * 3 + color * 3
     }
 

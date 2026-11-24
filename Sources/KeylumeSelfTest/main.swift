@@ -1,5 +1,5 @@
 import Foundation
-import AulaKit
+import KeylumeKit
 
 // Minimal test runner (no XCTest needed). Exit code 1 if anything fails.
 nonisolated(unsafe) var failures = 0
@@ -47,7 +47,7 @@ test("live report") {
     expect(r[8 + 366] == 0)
 }
 test("LED slots") {
-    let (kb, _) = AulaKeyboard.demo()
+    let (kb, _) = F75Keyboard.demo()
     var cfg = try kb.readLED()
     expect(cfg.effect == 1)
     try cfg.setSlot(2, EffectSlot(brightness: 7, speed: 3, color: 5))
@@ -92,7 +92,7 @@ test("layout and themes") {
     }
 }
 test("animations") {
-    let (kb, _) = AulaKeyboard.demo()
+    let (kb, _) = F75Keyboard.demo()
     var cfg = try kb.readLED()
     for e in Effects.all where e.hw != Effects.customHW {
         try cfg.setSlot(e.hw, EffectSlot(brightness: 9, speed: 2, color: 1))
@@ -102,12 +102,12 @@ test("animations") {
     for a in LiveAnimation.allCases { expect(a.frame(t: 1.7, color: RGB(255, 0, 0), theme: nil).count > 70, a.rawValue) }
 }
 test("effect write round trip") {
-    let (kb, ch) = AulaKeyboard.demo()
+    let (kb, ch) = F75Keyboard.demo()
     try kb.setEffect(6, brightness: 9, speed: 4, color: 2)
     expect(ch.led[LEDConfig.effectOffset] == 6 && ch.led[LEDConfig.effectHighOffset] == 0 && ch.led[LEDConfig.slotsOffset + 10] == 9 && ch.led[LEDConfig.slotsOffset + 11] == 0x42)
 }
 test("effect is 16-bit: high byte is cleared / set (official Hub)") {
-    let (kb, ch) = AulaKeyboard.demo()
+    let (kb, ch) = F75Keyboard.demo()
     ch.led[LEDConfig.effectHighOffset] = 1; ch.led[LEDConfig.effectOffset] = 0x12   // this keyboard's stock state (mode 274)
     try kb.setEffect(2, brightness: 7)
     expect(ch.led[LEDConfig.effectHighOffset] == 0 && ch.led[LEDConfig.effectOffset] == 2, "normal effect clears byte 9")
@@ -116,29 +116,29 @@ test("effect is 16-bit: high byte is cleared / set (official Hub)") {
     try expect(kb.readLED().effect == 277)
 }
 test("unchanged LED write sends nothing") {
-    let (kb, ch) = AulaKeyboard.demo()
+    let (kb, ch) = F75Keyboard.demo()
     try kb.writeLED(try kb.readLED())
     expect(!ch.log.contains(Wire.writeLED))
 }
 test("refuses unknown LED bytes") {
-    let (kb, ch) = AulaKeyboard.demo()
+    let (kb, ch) = F75Keyboard.demo()
     var raw = try kb.readLED().raw; raw[40] = 0x77
     expect(throwsError { try kb.writeLED(try LEDConfig(raw: raw)) })
     expect(!ch.log.contains(Wire.writeLED))
 }
 test("refuses sleep never") {
-    let (kb, ch) = AulaKeyboard.demo()
+    let (kb, ch) = F75Keyboard.demo()
     var raw = try kb.readLED().raw; raw[LEDConfig.sleepOffset] = 0
     expect(throwsError { try kb.writeLED(try LEDConfig(raw: raw)) })
     expect(!ch.log.contains(Wire.writeLED))
 }
 test("detects a dropped write") {
-    let (kb, ch) = AulaKeyboard.demo()
+    let (kb, ch) = F75Keyboard.demo()
     ch.dropWrites = true
-    do { try kb.setEffect(2); expect(false, "no error") } catch AulaError.verifyFailed { } catch { expect(false, "\(error)") }
+    do { try kb.setEffect(2); expect(false, "no error") } catch KeylumeError.verifyFailed { } catch { expect(false, "\(error)") }
 }
 test("palette write keeps tail and re-applies LED") {
-    let (kb, ch) = AulaKeyboard.demo()
+    let (kb, ch) = F75Keyboard.demo()
     let tail = Array(ch.palettePage[490...])
     var p = try kb.readPalette()
     p = try Palette.setting(p, hw: 1, color: 0, to: RGB(1, 2, 3))
@@ -148,13 +148,13 @@ test("palette write keeps tail and re-applies LED") {
     expect(ch.log.filter { $0 == Wire.writePalette || $0 == Wire.writeLED } == [Wire.writePalette, Wire.writeLED])
 }
 test("per-key write") {
-    let (kb, ch) = AulaKeyboard.demo()
+    let (kb, ch) = F75Keyboard.demo()
     try kb.writeCustom(Custom.encode(Themes.solid(RGB(9, 9, 9))))
     expect(Custom.decode(ch.custom)[0] == RGB(9, 9, 9))
     expect(throwsError { try kb.writeCustom([1, 2, 3]) })
 }
 test("keymap write (official layout)") {
-    let (kb, ch) = AulaKeyboard.demo()
+    let (kb, ch) = F75Keyboard.demo()
     var km = try kb.readKeymap()
     km = Keymap.setting(km, 0, to: .key(hid: 0x05))
     try kb.writeKeymap(km)
@@ -165,30 +165,30 @@ test("keymap write (official layout)") {
     expect(Keymap.entry(ch.keymaps[5], 0) == .key(hid: 0x05), "sub = 5 for Fn/Mac")
 }
 test("device info and battery") {
-    let (kb, _) = AulaKeyboard.demo()
+    let (kb, _) = F75Keyboard.demo()
     try expect(kb.readInfo().uuid == "0x0300000000cd")
-    try expect(kb.readBattery() == AulaKeyboard.Battery(level: 80, charging: true, full: false))
+    try expect(kb.readBattery() == F75Keyboard.Battery(level: 80, charging: true, full: false))
 }
 test("live frame header") {
-    let (kb, ch) = AulaKeyboard.demo()
+    let (kb, ch) = F75Keyboard.demo()
     try kb.sendLive([3: RGB(1, 1, 1)])
     expect(Array(ch.liveFrames[0].prefix(8)) == Wire.liveHeader)
 }
 test("never sends forbidden commands") {
-    let (kb, ch) = AulaKeyboard.demo()
+    let (kb, ch) = F75Keyboard.demo()
     _ = try Backup.capture(from: kb)
     try kb.setEffect(3)
     expect(Set(ch.log).isDisjoint(with: Wire.forbidden))
 }
 test("backup / restore") {
-    let (kb, ch) = AulaKeyboard.demo()
+    let (kb, ch) = F75Keyboard.demo()
     let b = try Backup.capture(from: kb)
     try kb.writeCustom(Custom.encode(Themes.solid(RGB(7, 7, 7))))
     try kb.setEffect(13)
     try b.restore(to: kb)
     expect(Custom.decode(ch.custom)[0] == RGB(0, 0, 0))
     expect(ch.led[LEDConfig.effectOffset] == 1)
-    let url = FileManager.default.temporaryDirectory.appendingPathComponent("aula-test-backup.json")
+    let url = FileManager.default.temporaryDirectory.appendingPathComponent("keylume-test-backup.json")
     try b.save(to: url)
     try expect(Backup.load(url).led == b.led)
 }
@@ -203,7 +203,7 @@ test("radio packets: framing and checksum") {
     expect(Radio.splitPackets(cmd: 0x01, sub: 0, data: [UInt8](repeating: 7, count: 30)).count == 3)
 }
 test("radio: reads match the keyboard") {
-    let (kb, ch) = AulaKeyboard.demoRadio()
+    let (kb, ch) = F75Keyboard.demoRadio()
     try expect(kb.readLED().raw == ch.board.led)
     try expect(kb.readPalette() == Array(ch.board.palettePage.prefix(Wire.paletteLength)))
     try expect(kb.readCustom() == ch.board.custom)
@@ -213,20 +213,20 @@ test("radio: reads match the keyboard") {
     expect(ch.unexpected.isEmpty)
 }
 test("radio: Bluetooth packet loss is retried") {
-    let (kb, ch) = AulaKeyboard.demoRadio(connection: .bluetooth)
+    let (kb, ch) = F75Keyboard.demoRadio(connection: .bluetooth)
     ch.lossyAttempts = 3
     try expect(kb.readLED().raw == ch.board.led)
     expect(ch.requests.count >= 2, "had to ask again")
 }
 test("radio: Bluetooth only reads small blocks") {
-    let (kb, ch) = AulaKeyboard.demoRadio(connection: .bluetooth)
+    let (kb, ch) = F75Keyboard.demoRadio(connection: .bluetooth)
     try expect(kb.readLED().raw == ch.board.led)
     try expect(kb.readBattery().level == 100)
     expect(throwsError { try kb.readKeymap() } && throwsError { try kb.readPalette() } && throwsError { try kb.readCustom() })
     expect(throwsError { try Backup.capture(from: kb) }, "a full backup needs the dongle or cable")
 }
 test("radio: settings are never written") {
-    let (kb, ch) = AulaKeyboard.demoRadio()
+    let (kb, ch) = F75Keyboard.demoRadio()
     expect(throwsError { try kb.setEffect(3) })
     expect(throwsError { try kb.writeCustom(Custom.encode(Themes.solid(RGB(9, 9, 9)))) })
     expect(throwsError { try kb.writeKeymap(try kb.readKeymap()) })
@@ -242,14 +242,14 @@ test("radio: live frames fit and use the live command") {
     var lit = 0, i = 0
     while i < groups.count { let n = Int(groups[i + 3]); lit += n; i += 4 + n }
     expect(i == groups.count && lit == 82, "every lit key listed once")
-    let (kb, ch) = AulaKeyboard.demoRadio()
+    let (kb, ch) = F75Keyboard.demoRadio()
     try kb.sendLive(colors)
     expect(!ch.livePackets.isEmpty && ch.livePackets.allSatisfy { $0[1] == 0x88 && Radio.parse($0) != nil })
-    let (bt, _) = AulaKeyboard.demoRadio(connection: .bluetooth)
+    let (bt, _) = F75Keyboard.demoRadio(connection: .bluetooth)
     expect(throwsError { try bt.sendLive(colors) }, "no live over Bluetooth")
 }
 test("radio: backup works without the Mac table") {
-    let (kb, ch) = AulaKeyboard.demoRadio()
+    let (kb, ch) = F75Keyboard.demoRadio()
     let b = try Backup.capture(from: kb)
     expect(b.keymapBaseMac == nil && b.led == Backup.hex(ch.board.led))
     expect(throwsError { try b.restore(to: kb) }, "restoring needs the cable")
@@ -280,7 +280,7 @@ test("legends: Windows and Mac") {
     expect(Legends.entry(.consumer(0xE2), flavor: .mac).main == "Mute")
 }
 test("per-key apply selects custom first, then resends the table") {
-    let (kb, ch) = AulaKeyboard.demo()
+    let (kb, ch) = F75Keyboard.demo()
     let table = Custom.encode(Themes.solid(RGB(5, 6, 7)))
     try kb.showCustom(table)
     expect(ch.led[LEDConfig.effectOffset] == 0x15 && ch.led[LEDConfig.effectHighOffset] == 1, "custom effect 277 selected")

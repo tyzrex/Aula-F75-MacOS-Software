@@ -1,5 +1,5 @@
 import SwiftUI
-import AulaKit
+import KeylumeKit
 
 enum Pane: String, CaseIterable, Identifiable {
     case overview = "Keyboard", lighting = "Lighting", perKey = "Per-Key RGB", live = "Live Animations"
@@ -120,7 +120,7 @@ struct SidebarFooter: View {
 }
 
 struct BatteryBadge: View {
-    let battery: AulaKeyboard.Battery
+    let battery: F75Keyboard.Battery
     var body: some View {
         HStack(spacing: 3) {
             Image(systemName: symbol).foregroundStyle(battery.level <= 15 && !battery.charging ? .red : .secondary)
@@ -174,7 +174,7 @@ struct ConnectView: View {
                 .frame(maxWidth: 560)
                 .opacity(model.present.isEmpty ? 0.8 : 1)
             VStack(spacing: 6) {
-                Text("AULA Hub").font(.system(size: 30, weight: .bold, design: .rounded))
+                Text("Keylume").font(.system(size: 30, weight: .bold, design: .rounded))
                 Text(headline).foregroundStyle(.secondary).multilineTextAlignment(.center)
             }
             VStack(spacing: 10) {
@@ -185,16 +185,42 @@ struct ConnectView: View {
             if let e = model.connectError {
                 VStack(spacing: 8) {
                     Text(e).foregroundStyle(.orange).multilineTextAlignment(.center).textSelection(.enabled)
-                    Button("Open Input Monitoring settings") {
-                        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")!)
-                    }.controlSize(.small)
+                    HStack {
+                        Button("Open Input Monitoring settings") { openInputMonitoring() }.controlSize(.small)
+                        Button("Copy diagnostics") { Diagnostics.copy(model) }.controlSize(.small)
+                    }
                 }.frame(maxWidth: 520)
             }
+            DisclosureGroup("First time? Three things to do") {
+                VStack(alignment: .leading, spacing: 8) {
+                    step(1, "Quit the official AULA software — only one program can talk to the keyboard.")
+                    step(2, "Allow Keylume under Privacy & Security ▸ Input Monitoring, then reopen it.")
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Spacer().frame(width: 22)
+                        Button("Open Input Monitoring settings") { openInputMonitoring() }.controlSize(.small)
+                    }
+                    step(3, "Plug the keyboard in with its USB cable (or switch it to 2.4G / Bluetooth for read-only access).")
+                }
+                .padding(.top, 6)
+            }
+            .frame(maxWidth: 420)
             Button("Try the demo keyboard") { model.connect(demo: true) }.buttonStyle(.link)
         }
         .padding(32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    private func openInputMonitoring() {
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")!)
+    }
+
+    private func step(_ n: Int, _ text: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text("\(n)").font(.caption.weight(.bold)).frame(width: 18, height: 18)
+                .background(Circle().fill(Color.accentColor.opacity(0.18)))
+            Text(text).font(.callout).fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     private var headline: String {

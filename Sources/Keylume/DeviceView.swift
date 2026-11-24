@@ -1,5 +1,5 @@
 import SwiftUI
-import AulaKit
+import KeylumeKit
 
 struct DeviceView: View {
     @EnvironmentObject var model: HubModel

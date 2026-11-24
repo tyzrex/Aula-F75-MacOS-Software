@@ -78,7 +78,7 @@ func drawIcon(size: Int) -> NSBitmapImageRep {
 }
 
 let out = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "AppIcon.icns"
-let set = NSTemporaryDirectory() + "AulaHub.iconset"
+let set = NSTemporaryDirectory() + "Keylume.iconset"
 try? FileManager.default.removeItem(atPath: set)
 try FileManager.default.createDirectory(atPath: set, withIntermediateDirectories: true)
 for (name, px) in [("icon_16x16", 16), ("icon_16x16@2x", 32), ("icon_32x32", 32), ("icon_32x32@2x", 64), ("icon_128x128", 128), ("icon_128x128@2x", 256),

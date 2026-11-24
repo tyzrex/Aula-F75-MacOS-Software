@@ -68,7 +68,7 @@ public final class HIDChannel: FeatureChannel {
             let hint = r == kIOReturnNotPermitted
                 ? "macOS blocked access. Allow this app (or your terminal) under System Settings → Privacy & Security → Input Monitoring, then restart it."
                 : (r == kIOReturnExclusiveAccess ? "another program has the keyboard open — quit the official AULA software." : String(format: "IOKit error 0x%08x", r))
-            throw AulaError.openFailed(hint)
+            throw KeylumeError.openFailed(hint)
         }
         opened = true
     }
@@ -80,7 +80,7 @@ public final class HIDChannel: FeatureChannel {
             IOHIDDeviceSetReport(device, kIOHIDReportTypeFeature, CFIndex(bytes[0]), $0.baseAddress!, bytes.count)
         }
         guard r == kIOReturnSuccess else {
-            throw AulaError.noReply(r == kIOReturnNotPermitted
+            throw KeylumeError.noReply(r == kIOReturnNotPermitted
                 ? "macOS denied the write — grant Input Monitoring permission."
                 : String(format: "sending to the keyboard failed (IOKit 0x%08x)", r))
         }
@@ -94,7 +94,7 @@ public final class HIDChannel: FeatureChannel {
             IOHIDDeviceGetReport(device, kIOHIDReportTypeFeature, CFIndex(id), $0.baseAddress!, &len)
         }
         guard r == kIOReturnSuccess else {
-            throw AulaError.noReply(String(format: "reading from the keyboard failed (IOKit 0x%08x)", r))
+            throw KeylumeError.noReply(String(format: "reading from the keyboard failed (IOKit 0x%08x)", r))
         }
         return Array(buf[0..<Int(len)])
     }
@@ -148,13 +148,13 @@ public enum HIDDiscovery {
         let all = enumerate()
         let wired = all.filter { $0.info.vendorID == USBIDs.wiredVID && $0.info.productID == USBIDs.wiredPID }
         guard !wired.isEmpty else {
-            throw AulaError.notFound
+            throw KeylumeError.notFound
         }
         // The config collection is vendor defined (0xFF00) and carries a 520 byte feature report.
         let pick = wired.first { $0.usagePage == 0xFF00 && $0.maxFeature >= Wire.reportLength - 1 }
             ?? wired.first { $0.maxFeature >= Wire.reportLength - 1 }
             ?? wired.first { $0.usagePage == 0xFF00 }
-        guard let c = pick else { throw AulaError.notFound }
+        guard let c = pick else { throw KeylumeError.notFound }
         let ch = HIDChannel(device: c.device)
         try ch.open()
         return (ch, c.info)

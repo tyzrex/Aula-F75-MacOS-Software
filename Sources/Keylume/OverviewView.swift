@@ -1,5 +1,5 @@
 import SwiftUI
-import AulaKit
+import KeylumeKit
 
 /// The current lighting drawn on the keyboard, animated like the real effect (an approximation).
 struct LEDPreview: View {

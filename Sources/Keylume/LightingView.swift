@@ -1,5 +1,5 @@
 import SwiftUI
-import AulaKit
+import KeylumeKit
 
 struct LightingView: View {
     @EnvironmentObject var model: HubModel

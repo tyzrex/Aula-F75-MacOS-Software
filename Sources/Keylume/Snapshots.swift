@@ -1,7 +1,7 @@
 import SwiftUI
-import AulaKit
+import KeylumeKit
 
-/// Renders each page to a PNG without a window server round trip: `AulaHub --demo --snapshot <dir>`.
+/// Renders each page to a PNG without a window server round trip: `Keylume --demo --snapshot <dir>`.
 /// Used to check the interface from the command line.
 @MainActor
 enum Snapshots {

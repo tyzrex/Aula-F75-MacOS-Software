@@ -1,5 +1,5 @@
 import SwiftUI
-import AulaKit
+import KeylumeKit
 
 /// Draws the F75: an aluminium case, keycaps with legends, the knob, and the LED color under each key.
 ///

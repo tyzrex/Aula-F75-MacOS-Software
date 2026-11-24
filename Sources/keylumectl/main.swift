@@ -1,28 +1,28 @@
 import Foundation
-import AulaKit
+import KeylumeKit
 
 let usage = """
-aula — AULA F75 control: full over the USB cable, read-only (plus live lighting on the dongle) over 2.4G / Bluetooth
+keylumectl — AULA F75 control: full over the USB cable, read-only (plus live lighting on the dongle) over 2.4G / Bluetooth
 
-  aula devices                          list AULA keyboards macOS can see
-  aula info                             lighting, side light, knob, OS mode, sleep, firmware
-  aula effects                          list lighting effects
-  aula effect <name> [-b 0-9] [-s 0-4] [-c color]
-  aula colors | themes                  list color names / per-key themes
-  aula theme <name>                     paint a per-key theme (switches to the custom effect)
-  aula fill <#rrggbb>                   one color on every key
-  aula key-color <key> <#rrggbb>        paint one key (custom effect)
-  aula palette <effect> <color> <#rrggbb> | palette-reset <effect>
-  aula live <animation> [seconds] [#rrggbb]   stream an animation (cable or dongle); `aula live list`
-  aula keymap [--fn] [--mac]            show the keymap
-  aula remap <key> <target> [--fn] [--mac]    e.g. remap capslock lctrl | remap f5 mute | remap #53 none
-  aula side-light off|fill|breathing|static
-  aula knob media|lighting
-  aula os windows|android|mac           also: aula mode mac
-  aula win-lock on|off
-  aula sleep <minutes>                  30 s steps, max 20, never is refused
-  aula battery
-  aula backup [file] | restore <file> [--keymap] | backups
+  keylumectl devices                          list AULA keyboards macOS can see
+  keylumectl info                             lighting, side light, knob, OS mode, sleep, firmware
+  keylumectl effects                          list lighting effects
+  keylumectl effect <name> [-b 0-9] [-s 0-4] [-c color]
+  keylumectl colors | themes                  list color names / per-key themes
+  keylumectl theme <name>                     paint a per-key theme (switches to the custom effect)
+  keylumectl fill <#rrggbb>                   one color on every key
+  keylumectl key-color <key> <#rrggbb>        paint one key (custom effect)
+  keylumectl palette <effect> <color> <#rrggbb> | palette-reset <effect>
+  keylumectl live <animation> [seconds] [#rrggbb]   stream an animation (cable or dongle); `keylumectl live list`
+  keylumectl keymap [--fn] [--mac]            show the keymap
+  keylumectl remap <key> <target> [--fn] [--mac]    e.g. remap capslock lctrl | remap f5 mute | remap #53 none
+  keylumectl side-light off|fill|breathing|static
+  keylumectl knob media|lighting
+  keylumectl os windows|android|mac           also: keylumectl mode mac
+  keylumectl win-lock on|off
+  keylumectl sleep <minutes>                  30 s steps, max 20, never is refused
+  keylumectl battery
+  keylumectl backup [file] | restore <file> [--keymap] | backups
 
 options: --demo            use a simulated keyboard (no hardware needed)
          --via wired|dongle|bluetooth   insist on one connection (default: the cable if present)
@@ -34,22 +34,22 @@ let demo = args.contains("--demo")
 args.removeAll { $0 == "--demo" }
 var via: Connection?
 if let i = args.firstIndex(of: "--via") {
-    guard i + 1 < args.count, let c = Connection(rawValue: args[i + 1]) else { FileHandle.standardError.write(Data("aula: --via needs wired, dongle or bluetooth\n".utf8)); exit(1) }
+    guard i + 1 < args.count, let c = Connection(rawValue: args[i + 1]) else { FileHandle.standardError.write(Data("keylumectl: --via needs wired, dongle or bluetooth\n".utf8)); exit(1) }
     via = c; args.removeSubrange(i...i + 1)
 }
 let flagFn = args.contains("--fn"), flagMac = args.contains("--mac"), flagKeymap = args.contains("--keymap")
 args.removeAll { ["--fn", "--mac", "--keymap"].contains($0) }
 
-func fail(_ msg: String) -> Never { FileHandle.standardError.write(Data(("aula: " + msg + "\n").utf8)); exit(1) }
+func fail(_ msg: String) -> Never { FileHandle.standardError.write(Data(("keylumectl: " + msg + "\n").utf8)); exit(1) }
 
 func option(_ name: String) -> String? {
     guard let i = args.firstIndex(of: name), i + 1 < args.count else { return nil }
     let v = args[i + 1]; args.removeSubrange(i...i + 1); return v
 }
 
-func connect() -> AulaKeyboard {
-    if demo { return AulaKeyboard.demo().0 }
-    do { return try AulaKeyboard.connect(only: via) } catch { fail(error.localizedDescription) }
+func connect() -> F75Keyboard {
+    if demo { return F75Keyboard.demo().0 }
+    do { return try F75Keyboard.connect(only: via) } catch { fail(error.localizedDescription) }
 }
 
 func rgb(_ s: String) -> RGB {
@@ -103,41 +103,41 @@ func run() throws {
         print("sleep:      \(Names.sleepText(cfg.sleep))")
 
     case "effect":
-        guard let name = args.first, let e = Effects.named(name) else { fail("unknown effect; see `aula effects`") }
+        guard let name = args.first, let e = Effects.named(name) else { fail("unknown effect; see `keylumectl effects`") }
         args.removeFirst()
         let b = option("-b").flatMap(Int.init), s = option("-s").flatMap(Int.init), c = option("-c").map(colorIndex)
         try connect().setEffect(e.hw, brightness: b, speed: s, color: c)
         print("effect → \(e.name)")
 
     case "theme":
-        guard let n = args.first, let t = Themes.named(n) else { fail("unknown theme; see `aula themes`") }
+        guard let n = args.first, let t = Themes.named(n) else { fail("unknown theme; see `keylumectl themes`") }
         let kb = connect()
         try kb.showCustom(Custom.encode(t.render()))
         print("theme → \(t.name)")
 
     case "fill":
-        guard let h = args.first else { fail("usage: aula fill #rrggbb") }
+        guard let h = args.first else { fail("usage: keylumectl fill #rrggbb") }
         let kb = connect()
         try kb.showCustom(Custom.encode(Themes.solid(rgb(h))))
 
     case "key-color":
-        guard args.count >= 2, let idx = Keymap.index(of: args[0]) else { fail("usage: aula key-color <key> <#rrggbb>") }
+        guard args.count >= 2, let idx = Keymap.index(of: args[0]) else { fail("usage: keylumectl key-color <key> <#rrggbb>") }
         let kb = connect()
         var colors = Custom.decode(try kb.readCustom())
         colors[idx] = rgb(args[1])
         try kb.showCustom(Custom.encode(colors))
 
     case "palette":
-        guard args.count == 3, let e = Effects.named(args[0]) else { fail("usage: aula palette <effect> <color 0-6> #rrggbb") }
+        guard args.count == 3, let e = Effects.named(args[0]) else { fail("usage: keylumectl palette <effect> <color 0-6> #rrggbb") }
         let kb = connect()
         try kb.writePalette(try Palette.setting(try kb.readPalette(), hw: e.hw, color: colorIndex(args[1]), to: rgb(args[2])))
     case "palette-reset":
-        guard let n = args.first, let e = Effects.named(n) else { fail("usage: aula palette-reset <effect>") }
+        guard let n = args.first, let e = Effects.named(n) else { fail("usage: keylumectl palette-reset <effect>") }
         let kb = connect()
         try kb.writePalette(try Palette.reset(try kb.readPalette(), hw: e.hw))
 
     case "live":
-        guard let name = args.first, let anim = LiveAnimation(rawValue: name) else { fail("unknown animation; see `aula live list`") }
+        guard let name = args.first, let anim = LiveAnimation(rawValue: name) else { fail("unknown animation; see `keylumectl live list`") }
         let secs = args.dropFirst().first.flatMap(Double.init) ?? 10
         let color = args.dropFirst(2).first.map(rgb) ?? RGB(0, 160, 255)
         let kb = connect()
@@ -155,7 +155,7 @@ func run() throws {
         }
 
     case "remap":
-        guard args.count == 2, let idx = Keymap.index(of: args[0]) else { fail("usage: aula remap <key> <target> [--fn] [--mac]") }
+        guard args.count == 2, let idx = Keymap.index(of: args[0]) else { fail("usage: keylumectl remap <key> <target> [--fn] [--mac]") }
         guard let target = Keymap.target(named: args[1]) else { fail("unknown target '\(args[1])'. Try a letter, f5, lctrl, mute, volume-up, none …") }
         let kb = connect()
         let layer = flagFn ? 1 : 0, system = flagMac ? 1 : 0
@@ -170,7 +170,7 @@ func run() throws {
     case "os", "mode": try connect().updateLED { $0.osMode = pick(Names.osModes, args.first, "mode") }
     case "win-lock": try connect().updateLED { $0.winLock = args.first == "on" }
     case "sleep":
-        guard let m = args.first.flatMap(Double.init) else { fail("usage: aula sleep <minutes>") }
+        guard let m = args.first.flatMap(Double.init) else { fail("usage: keylumectl sleep <minutes>") }
         try connect().updateLED { try $0.setSleep(Int(m * 60)) }
 
     case "battery":
@@ -182,12 +182,12 @@ func run() throws {
         let url = try b.save(to: args.first.map { URL(fileURLWithPath: $0) })
         print("saved \(url.path)")
     case "restore":
-        guard let f = args.first else { fail("usage: aula restore <file> [--keymap]") }
+        guard let f = args.first else { fail("usage: keylumectl restore <file> [--keymap]") }
         try Backup.load(URL(fileURLWithPath: f)).restore(to: connect(), includeKeymap: flagKeymap)
         print("restored")
     case "backups": for u in Backup.list() { print(u.path) }
 
-    default: fail("unknown command '\(cmd)'. Run `aula help`.")
+    default: fail("unknown command '\(cmd)'. Run `keylumectl help`.")
     }
 }
 

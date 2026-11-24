@@ -15,17 +15,17 @@ public struct Backup: Codable, Sendable {
 
     public static func hex(_ b: [UInt8]) -> String { b.map { String(format: "%02x", $0) }.joined() }
     static func bytes(_ s: String) throws -> [UInt8] {
-        guard s.count % 2 == 0 else { throw AulaError.protocolError("corrupt backup") }
+        guard s.count % 2 == 0 else { throw KeylumeError.protocolError("corrupt backup") }
         var out: [UInt8] = []; var i = s.startIndex
         while i < s.endIndex {
             let j = s.index(i, offsetBy: 2)
-            guard let v = UInt8(s[i..<j], radix: 16) else { throw AulaError.protocolError("corrupt backup") }
+            guard let v = UInt8(s[i..<j], radix: 16) else { throw KeylumeError.protocolError("corrupt backup") }
             out.append(v); i = j
         }
         return out
     }
 
-    public static func capture(from kb: AulaKeyboard) throws -> Backup {
+    public static func capture(from kb: F75Keyboard) throws -> Backup {
         Backup(created: Date(), device: kb.info.name,
                led: hex(try kb.readLED().raw), palette: hex(try kb.readPalette()), custom: hex(try kb.readCustom()),
                keymapBase: hex(try kb.readKeymap(layer: 0)), keymapFn: hex(try kb.readKeymap(layer: 1)),
@@ -33,7 +33,7 @@ public struct Backup: Codable, Sendable {
     }
 
     /// Write lighting, palettes and per-key colors back, and optionally the keymaps.
-    public func restore(to kb: AulaKeyboard, includeKeymap: Bool = false) throws {
+    public func restore(to kb: F75Keyboard, includeKeymap: Bool = false) throws {
         let ledRaw = try Self.bytes(led)
         var cfg = try LEDConfig(raw: ledRaw)
         if cfg.sleep == 0 { try cfg.setSleep(60) }
@@ -52,7 +52,15 @@ public struct Backup: Codable, Sendable {
 
     public static var directory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("AulaHub/backups", isDirectory: true)
+        let dir = base.appendingPathComponent("Keylume/backups", isDirectory: true)
+        // The app used to be called AULA Hub; carry its backups over.
+        let old = base.appendingPathComponent("AulaHub", isDirectory: true)
+        let fm = FileManager.default
+        if fm.fileExists(atPath: old.path), !fm.fileExists(atPath: dir.path) {
+            try? fm.createDirectory(at: dir.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? fm.moveItem(at: old.appendingPathComponent("backups", isDirectory: true), to: dir)
+        }
+        return dir
     }
 
     @discardableResult

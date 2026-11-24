@@ -1,5 +1,5 @@
 import SwiftUI
-import AulaKit
+import KeylumeKit
 
 struct PerKeyView: View {
     @EnvironmentObject var model: HubModel
@@ -7,6 +7,9 @@ struct PerKeyView: View {
     @Local private var paint = Color.cyan
     @Local private var themeName: String?
     @Local private var dirty = false
+    @Local private var undoStack: [[Int: RGB]] = []
+    @Local private var redoStack: [[Int: RGB]] = []
+    @Local private var lastPush = Date.distantPast
 
     private var editable: Bool { model.canWrite && !model.busy }
 
@@ -17,9 +20,13 @@ struct PerKeyView: View {
                     .frame(maxWidth: .infinity)
                 HStack(spacing: 12) {
                     ColorPicker("Brush", selection: $paint, supportsOpacity: false)
-                    Button("Fill all") { draft = Themes.solid(RGB(paint)); mark() }
-                    Button("All off") { draft = Themes.solid(.black); mark() }
+                    Button("Fill all") { checkpoint(force: true); draft = Themes.solid(RGB(paint)); mark() }
+                    Button("All off") { checkpoint(force: true); draft = Themes.solid(.black); mark() }
                     Spacer()
+                    Button { undo() } label: { Image(systemName: "arrow.uturn.backward") }
+                        .keyboardShortcut("z", modifiers: .command).disabled(undoStack.isEmpty).help("Undo (⌘Z)")
+                    Button { redo() } label: { Image(systemName: "arrow.uturn.forward") }
+                        .keyboardShortcut("z", modifiers: [.command, .shift]).disabled(redoStack.isEmpty).help("Redo (⇧⌘Z)")
                     Button("Reload") { draft = model.custom; dirty = false; themeName = nil }.disabled(!dirty)
                     Button {
                         let raw = Custom.encode(draft)
@@ -43,13 +50,31 @@ struct PerKeyView: View {
 
     private func mark() { dirty = true; themeName = nil }
 
+    /// Remember the picture before a change. A drag over many keys counts as one change.
+    private func checkpoint(force: Bool = false) {
+        guard force || Date().timeIntervalSince(lastPush) > 0.6 else { lastPush = Date(); return }
+        undoStack.append(draft); if undoStack.count > 100 { undoStack.removeFirst() }
+        redoStack = []; lastPush = Date()
+    }
+
+    private func undo() {
+        guard let previous = undoStack.popLast() else { return }
+        redoStack.append(draft); draft = previous; dirty = true; themeName = nil
+    }
+
+    private func redo() {
+        guard let next = redoStack.popLast() else { return }
+        undoStack.append(draft); draft = next; dirty = true; themeName = nil
+    }
+
     private func paintKey(_ k: KeyInfo) {
+        checkpoint()
         draft[k.index] = RGB(paint); mark()
     }
 
     private func themeTile(_ t: Theme) -> some View {
         Button {
-            themeName = t.name; draft = t.render(); dirty = true
+            checkpoint(force: true); themeName = t.name; draft = t.render(); dirty = true
         } label: {
             VStack(alignment: .leading, spacing: 6) {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
